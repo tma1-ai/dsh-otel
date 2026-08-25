@@ -1,45 +1,99 @@
 {
   "uid": "dsh-overview",
-  "title": "DSH · Overview",
+  "title": "DSH \u00b7 Overview",
   "description": "Cost, throughput, and latency of a DeepSeek Harness agent, from OpenTelemetry traces in GreptimeDB.",
-  "tags": ["dsh", "greptimedb", "genai"],
+  "tags": [
+    "dsh",
+    "greptimedb",
+    "genai"
+  ],
   "timezone": "browser",
   "schemaVersion": 39,
   "version": 1,
   "editable": true,
   "refresh": "30s",
-  "time": { "from": "now-6h", "to": "now" },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
   "templating": {
     "list": [
       {
         "name": "model",
         "label": "Model",
         "type": "query",
-        "datasource": { "type": "mysql", "uid": "greptimedb" },
+        "datasource": {
+          "type": "mysql",
+          "uid": "greptimedb"
+        },
         "query": "SELECT DISTINCT `span_attributes.gen_ai.request.model` FROM opentelemetry_traces WHERE `span_attributes.gen_ai.request.model` IS NOT NULL",
         "refresh": 1,
         "includeAll": true,
         "multi": true,
-        "current": { "text": "All", "value": "$__all" }
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
       }
     ]
   },
   "panels": [
-    { "type": "row", "title": "Overview", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }, "collapsed": false, "panels": [] },
+    {
+      "type": "row",
+      "title": "Overview",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "collapsed": false,
+      "panels": []
+    },
     {
       "type": "stat",
       "title": "Turns",
       "description": "One per user request the agent worked on.",
-      "datasource": { "type": "mysql", "uid": "greptimedb" },
-      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 1 },
-      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "fixed", "fixedColor": "text" } }, "overrides": [] },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "value", "graphMode": "none" },
+      "datasource": {
+        "type": "mysql",
+        "uid": "greptimedb"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value",
+        "graphMode": "none"
+      },
       "targets": [
         {
           "refId": "A",
           "format": "table",
           "rawQuery": true,
-          "datasource": { "type": "mysql", "uid": "greptimedb" },
+          "datasource": {
+            "type": "mysql",
+            "uid": "greptimedb"
+          },
           "rawSql": "SELECT COUNT(*) AS turns FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND span_name = 'invoke_agent dsh'"
         }
       ]
@@ -48,16 +102,46 @@
       "type": "stat",
       "title": "Model calls",
       "description": "Chat spans. A turn holds one per step.",
-      "datasource": { "type": "mysql", "uid": "greptimedb" },
-      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 },
-      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "fixed", "fixedColor": "text" } }, "overrides": [] },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "value", "graphMode": "none" },
+      "datasource": {
+        "type": "mysql",
+        "uid": "greptimedb"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value",
+        "graphMode": "none"
+      },
       "targets": [
         {
           "refId": "A",
           "format": "table",
           "rawQuery": true,
-          "datasource": { "type": "mysql", "uid": "greptimedb" },
+          "datasource": {
+            "type": "mysql",
+            "uid": "greptimedb"
+          },
           "rawSql": "SELECT COUNT(*) AS calls FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND `span_attributes.gen_ai.system` IS NOT NULL AND `span_attributes.gen_ai.request.model` IN ($model)"
         }
       ]
@@ -66,16 +150,46 @@
       "type": "stat",
       "title": "Billed input tokens",
       "description": "Uncached input plus cache reads and writes, matching what the provider charges for.",
-      "datasource": { "type": "mysql", "uid": "greptimedb" },
-      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 1 },
-      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "fixed", "fixedColor": "text" } }, "overrides": [] },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "value", "graphMode": "none" },
+      "datasource": {
+        "type": "mysql",
+        "uid": "greptimedb"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value",
+        "graphMode": "none"
+      },
       "targets": [
         {
           "refId": "A",
           "format": "table",
           "rawQuery": true,
-          "datasource": { "type": "mysql", "uid": "greptimedb" },
+          "datasource": {
+            "type": "mysql",
+            "uid": "greptimedb"
+          },
           "rawSql": "SELECT SUM(`span_attributes.gen_ai.usage.input_tokens`) AS tokens FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND `span_attributes.gen_ai.system` IS NOT NULL AND `span_attributes.gen_ai.request.model` IN ($model)"
         }
       ]
@@ -84,60 +198,172 @@
       "type": "stat",
       "title": "Failed turns",
       "description": "Turns that ended with the error reason.",
-      "datasource": { "type": "mysql", "uid": "greptimedb" },
-      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 1 },
+      "datasource": {
+        "type": "mysql",
+        "uid": "greptimedb"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 1
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "percent",
           "decimals": 1,
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 5 }, { "color": "red", "value": 15 }] },
-          "color": { "mode": "thresholds" }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 5
+              },
+              {
+                "color": "red",
+                "value": 15
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
         },
         "overrides": []
       },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "value", "graphMode": "none" },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value",
+        "graphMode": "none"
+      },
       "targets": [
         {
           "refId": "A",
           "format": "table",
           "rawQuery": true,
-          "datasource": { "type": "mysql", "uid": "greptimedb" },
+          "datasource": {
+            "type": "mysql",
+            "uid": "greptimedb"
+          },
           "rawSql": "SELECT ROUND(100.0 * SUM(CASE WHEN `span_attributes.dsh.turn.end_reason` = 'error' THEN 1 ELSE 0 END) / COUNT(*), 2) AS error_rate FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND `span_attributes.dsh.turn.end_reason` IS NOT NULL"
         }
       ]
     },
-
-    { "type": "row", "title": "Tokens and cache", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 }, "collapsed": false, "panels": [] },
+    {
+      "type": "row",
+      "title": "Tokens and cache",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 5
+      },
+      "collapsed": false,
+      "panels": []
+    },
     {
       "type": "timeseries",
       "title": "Token usage over time",
-      "datasource": { "type": "mysql", "uid": "greptimedb" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
-      "fieldConfig": { "defaults": { "unit": "short", "custom": { "fillOpacity": 20, "stacking": { "mode": "normal", "group": "A" }, "lineWidth": 1 } }, "overrides": [] },
-      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "datasource": {
+        "type": "mysql",
+        "uid": "greptimedb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 20,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "lineWidth": 1
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
       "targets": [
         {
           "refId": "A",
           "format": "time_series",
           "rawQuery": true,
-          "datasource": { "type": "mysql", "uid": "greptimedb" },
-          "rawSql": "SELECT date_trunc('minute', timestamp) AS time, SUM(`span_attributes.dsh.usage.uncached_input_tokens`) AS uncached_input, SUM(`span_attributes.dsh.usage.cache_read_tokens`) AS cache_read, SUM(`span_attributes.gen_ai.usage.output_tokens`) AS output FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND `span_attributes.gen_ai.system` IS NOT NULL AND `span_attributes.gen_ai.request.model` IN ($model) GROUP BY time ORDER BY time"
+          "datasource": {
+            "type": "mysql",
+            "uid": "greptimedb"
+          },
+          "rawSql": "SELECT date_bin('5 minutes'::INTERVAL, timestamp) AS time, SUM(`span_attributes.dsh.usage.uncached_input_tokens`) AS uncached_input, SUM(`span_attributes.dsh.usage.cache_read_tokens`) AS cache_read, SUM(`span_attributes.gen_ai.usage.output_tokens`) AS output FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND `span_attributes.gen_ai.system` IS NOT NULL AND `span_attributes.gen_ai.request.model` IN ($model) GROUP BY time ORDER BY time"
         }
       ]
     },
     {
       "type": "barchart",
       "title": "Tokens by model",
-      "datasource": { "type": "mysql", "uid": "greptimedb" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
-      "fieldConfig": { "defaults": { "unit": "short", "custom": { "fillOpacity": 80, "lineWidth": 0 } }, "overrides": [] },
-      "options": { "xField": "model", "stacking": "normal", "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "orientation": "horizontal" },
+      "datasource": {
+        "type": "mysql",
+        "uid": "greptimedb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 80,
+            "lineWidth": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "xField": "model",
+        "stacking": "normal",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "orientation": "horizontal"
+      },
       "targets": [
         {
           "refId": "A",
           "format": "table",
           "rawQuery": true,
-          "datasource": { "type": "mysql", "uid": "greptimedb" },
+          "datasource": {
+            "type": "mysql",
+            "uid": "greptimedb"
+          },
           "rawSql": "SELECT `span_attributes.gen_ai.request.model` AS model, SUM(`span_attributes.dsh.usage.uncached_input_tokens`) AS uncached_input, SUM(`span_attributes.dsh.usage.cache_read_tokens`) AS cache_read, SUM(`span_attributes.gen_ai.usage.output_tokens`) AS output FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND `span_attributes.gen_ai.system` IS NOT NULL AND `span_attributes.gen_ai.request.model` IN ($model) GROUP BY model ORDER BY model"
         }
       ]
@@ -146,24 +372,63 @@
       "type": "stat",
       "title": "Cache read share",
       "description": "Share of billed input tokens served from the provider's cache. DSH reports disjoint counts, so this is directly computable.",
-      "datasource": { "type": "mysql", "uid": "greptimedb" },
-      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 14 },
+      "datasource": {
+        "type": "mysql",
+        "uid": "greptimedb"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 0,
+        "y": 14
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "percent",
           "decimals": 1,
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "orange", "value": 30 }, { "color": "green", "value": 60 }] },
-          "color": { "mode": "thresholds" }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 30
+              },
+              {
+                "color": "green",
+                "value": 60
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
         },
         "overrides": []
       },
-      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "value", "graphMode": "none" },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value",
+        "graphMode": "none"
+      },
       "targets": [
         {
           "refId": "A",
           "format": "table",
           "rawQuery": true,
-          "datasource": { "type": "mysql", "uid": "greptimedb" },
+          "datasource": {
+            "type": "mysql",
+            "uid": "greptimedb"
+          },
           "rawSql": "SELECT ROUND(100.0 * SUM(COALESCE(`span_attributes.dsh.usage.cache_read_tokens`, 0)) / NULLIF(SUM(`span_attributes.gen_ai.usage.input_tokens`), 0), 2) AS cache_share FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND `span_attributes.gen_ai.system` IS NOT NULL AND `span_attributes.gen_ai.request.model` IN ($model)"
         }
       ]
@@ -171,59 +436,176 @@
     {
       "type": "timeseries",
       "title": "Cache read share over time",
-      "datasource": { "type": "mysql", "uid": "greptimedb" },
-      "gridPos": { "h": 6, "w": 18, "x": 6, "y": 14 },
-      "fieldConfig": { "defaults": { "unit": "percent", "max": 100, "min": 0, "custom": { "fillOpacity": 10, "lineWidth": 2 } }, "overrides": [] },
-      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "datasource": {
+        "type": "mysql",
+        "uid": "greptimedb"
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 18,
+        "x": 6,
+        "y": 14
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "max": 100,
+          "min": 0,
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
       "targets": [
         {
           "refId": "A",
           "format": "time_series",
           "rawQuery": true,
-          "datasource": { "type": "mysql", "uid": "greptimedb" },
-          "rawSql": "SELECT date_trunc('minute', timestamp) AS time, ROUND(100.0 * SUM(COALESCE(`span_attributes.dsh.usage.cache_read_tokens`, 0)) / NULLIF(SUM(`span_attributes.gen_ai.usage.input_tokens`), 0), 2) AS cache_share FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND `span_attributes.gen_ai.system` IS NOT NULL AND `span_attributes.gen_ai.request.model` IN ($model) GROUP BY time ORDER BY time"
+          "datasource": {
+            "type": "mysql",
+            "uid": "greptimedb"
+          },
+          "rawSql": "SELECT date_bin('5 minutes'::INTERVAL, timestamp) AS time, ROUND(100.0 * SUM(COALESCE(`span_attributes.dsh.usage.cache_read_tokens`, 0)) / NULLIF(SUM(`span_attributes.gen_ai.usage.input_tokens`), 0), 2) AS cache_share FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND `span_attributes.gen_ai.system` IS NOT NULL AND `span_attributes.gen_ai.request.model` IN ($model) GROUP BY time ORDER BY time"
         }
       ]
     },
-
-    { "type": "row", "title": "Latency", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 20 }, "collapsed": false, "panels": [] },
+    {
+      "type": "row",
+      "title": "Latency",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 20
+      },
+      "collapsed": false,
+      "panels": []
+    },
     {
       "type": "timeseries",
       "title": "Model call latency p95 by model",
-      "datasource": { "type": "mysql", "uid": "greptimedb" },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 21 },
-      "fieldConfig": { "defaults": { "unit": "ms", "custom": { "fillOpacity": 0, "lineWidth": 2 } }, "overrides": [] },
-      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "datasource": {
+        "type": "mysql",
+        "uid": "greptimedb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 10,
+        "x": 0,
+        "y": 21
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "fillOpacity": 0,
+            "lineWidth": 2,
+            "showPoints": "auto",
+            "pointSize": 4
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
       "targets": [
         {
           "refId": "A",
           "format": "time_series",
           "rawQuery": true,
-          "datasource": { "type": "mysql", "uid": "greptimedb" },
-          "rawSql": "SELECT date_trunc('minute', timestamp) AS time, `span_attributes.gen_ai.request.model` AS model, ROUND(approx_percentile_cont(duration_nano, 0.95) / 1000000, 1) AS p95_ms FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND `span_attributes.gen_ai.system` IS NOT NULL AND `span_attributes.gen_ai.request.model` IN ($model) GROUP BY time, model ORDER BY time"
+          "datasource": {
+            "type": "mysql",
+            "uid": "greptimedb"
+          },
+          "rawSql": "SELECT date_bin('5 minutes'::INTERVAL, timestamp) AS time, `span_attributes.gen_ai.request.model` AS model, ROUND(approx_percentile_cont(duration_nano, 0.95) / 1000000, 1) AS p95_ms FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND `span_attributes.gen_ai.system` IS NOT NULL AND `span_attributes.gen_ai.request.model` IN ($model) GROUP BY time, model ORDER BY time"
         }
       ]
     },
     {
       "type": "table",
       "title": "Per model",
-      "datasource": { "type": "mysql", "uid": "greptimedb" },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 21 },
+      "datasource": {
+        "type": "mysql",
+        "uid": "greptimedb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 14,
+        "x": 10,
+        "y": 21
+      },
       "fieldConfig": {
-        "defaults": { "custom": { "align": "auto" } },
+        "defaults": {
+          "custom": {
+            "align": "auto"
+          }
+        },
         "overrides": [
-          { "matcher": { "id": "byName", "options": "p50_ms" }, "properties": [{ "id": "unit", "value": "ms" }] },
-          { "matcher": { "id": "byName", "options": "p95_ms" }, "properties": [{ "id": "unit", "value": "ms" }] }
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p50_ms"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "p95_ms"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              }
+            ]
+          }
         ]
       },
-      "options": { "showHeader": true, "footer": { "show": false } },
+      "options": {
+        "showHeader": true,
+        "footer": {
+          "show": false
+        },
+        "cellHeight": "sm"
+      },
       "targets": [
         {
           "refId": "A",
           "format": "table",
           "rawQuery": true,
-          "datasource": { "type": "mysql", "uid": "greptimedb" },
-          "rawSql": "SELECT `span_attributes.gen_ai.request.model` AS model, COUNT(*) AS calls, ROUND(approx_percentile_cont(duration_nano, 0.50) / 1000000, 1) AS p50_ms, ROUND(approx_percentile_cont(duration_nano, 0.95) / 1000000, 1) AS p95_ms, SUM(`span_attributes.gen_ai.usage.input_tokens`) AS billed_input, SUM(`span_attributes.gen_ai.usage.output_tokens`) AS output FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND `span_attributes.gen_ai.system` IS NOT NULL AND `span_attributes.gen_ai.request.model` IN ($model) GROUP BY model ORDER BY calls DESC"
+          "datasource": {
+            "type": "mysql",
+            "uid": "greptimedb"
+          },
+          "rawSql": "SELECT `span_attributes.gen_ai.request.model` AS model, COUNT(*) AS calls, ROUND(approx_percentile_cont(duration_nano, 0.50) / 1000000, 1) AS p50_ms, ROUND(approx_percentile_cont(duration_nano, 0.95) / 1000000, 1) AS p95_ms FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND `span_attributes.gen_ai.system` IS NOT NULL AND `span_attributes.gen_ai.request.model` IN ($model) GROUP BY model ORDER BY calls DESC"
         }
       ]
     }

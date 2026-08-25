@@ -447,7 +447,7 @@
             "type": "mysql",
             "uid": "greptimedb"
           },
-          "rawSql": "SELECT date_trunc('minute', timestamp) AS time, event_type, COUNT(*) AS events FROM dsh_logs WHERE $__timeFilter(timestamp) AND session_id LIKE '$session' AND event_type LIKE '$event_type' AND ('$search' = '' OR matches_term(body, '$search')) GROUP BY time, event_type ORDER BY time"
+          "rawSql": "SELECT date_bin('5 minutes'::INTERVAL, timestamp) AS time, event_type, COUNT(*) AS events FROM dsh_logs WHERE $__timeFilter(timestamp) AND session_id LIKE '$session' AND event_type LIKE '$event_type' AND ('$search' = '' OR matches_term(body, '$search')) GROUP BY time, event_type ORDER BY time"
         }
       ]
     },

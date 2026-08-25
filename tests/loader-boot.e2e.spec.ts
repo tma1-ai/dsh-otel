@@ -25,7 +25,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Session } from '@deepseek-ai/dsh-session'
 import { TARBALL_ENV } from './global-setup.js'
 
-const PACKAGE_NAME = 'dsh-plugin-greptimedb'
+const PACKAGE_NAME = '@tma1-ai/dsh-plugin-greptimedb'
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const PROMPT_SENTINEL = 'SENTINEL_BOOT_PROMPT'
 const TOOL_ARG_SENTINEL = 'SENTINEL_BOOT_TOOL_ARGUMENTS'
@@ -85,6 +85,8 @@ describe('boot through the real DSH Loader', () => {
     run('tar', ['xzf', tarball, '-C', installRoot], root)
     bareLink = join(root, 'node_modules', PACKAGE_NAME)
     rmSync(bareLink, { recursive: true, force: true })
+    // A scoped name needs its scope directory to exist before the link.
+    mkdirSync(dirname(bareLink), { recursive: true })
     symlinkSync(join(installRoot, 'package'), bareLink, 'dir')
 
     const port = await startCollector()

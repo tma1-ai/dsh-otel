@@ -139,12 +139,12 @@ export function resolveConfig(config: Config): ResolvedConfig {
   const endpoint = parseEndpoint(config.endpoint)
   const signals = new Set(config.signals ?? ALL_SIGNALS)
   if (signals.size === 0) {
-    throw new Error('dsh-plugin-greptimedb: signals must name at least one of traces, metrics, logs')
+    throw new Error('@tma1-ai/dsh-plugin-greptimedb: signals must name at least one of traces, metrics, logs')
   }
   const username = config.username ?? ''
   const password = config.password ?? ''
   if ((username === '') !== (password === '')) {
-    throw new Error('dsh-plugin-greptimedb: username and password must be set together')
+    throw new Error('@tma1-ai/dsh-plugin-greptimedb: username and password must be set together')
   }
   const exportTimeoutMillis = duration(config.exportTimeoutMillis, DEFAULT_EXPORT_TIMEOUT_MILLIS, 'exportTimeoutMillis')
   const metricIntervalMillis = duration(config.metricIntervalMillis, DEFAULT_METRIC_INTERVAL_MILLIS, 'metricIntervalMillis')
@@ -152,7 +152,7 @@ export function resolveConfig(config: Config): ResolvedConfig {
   // names both fields instead of surfacing an SDK message at mount time.
   if (metricIntervalMillis < exportTimeoutMillis) {
     throw new Error(
-      `dsh-plugin-greptimedb: metricIntervalMillis (${String(metricIntervalMillis)}) must be at least exportTimeoutMillis (${String(exportTimeoutMillis)})`,
+      `@tma1-ai/dsh-plugin-greptimedb: metricIntervalMillis (${String(metricIntervalMillis)}) must be at least exportTimeoutMillis (${String(exportTimeoutMillis)})`,
     )
   }
   return {
@@ -188,20 +188,20 @@ export function signalUrl(endpoint: URL, signal: Signal): string {
 
 function parseEndpoint(raw: string): URL {
   if (raw === undefined || raw === '') {
-    throw new Error('dsh-plugin-greptimedb: endpoint is required (the GreptimeDB OTLP base URL, e.g. http://localhost:4000/v1/otlp)')
+    throw new Error('@tma1-ai/dsh-plugin-greptimedb: endpoint is required (the GreptimeDB OTLP base URL, e.g. http://localhost:4000/v1/otlp)')
   }
   let parsed: URL
   try {
     parsed = new URL(raw)
   } catch {
     // The only way to reach this catch is a string URL() cannot parse.
-    throw new Error(`dsh-plugin-greptimedb: endpoint is not a valid URL: ${JSON.stringify(raw)}`)
+    throw new Error(`@tma1-ai/dsh-plugin-greptimedb: endpoint is not a valid URL: ${JSON.stringify(raw)}`)
   }
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    throw new Error(`dsh-plugin-greptimedb: endpoint must be http(s), got ${parsed.protocol}`)
+    throw new Error(`@tma1-ai/dsh-plugin-greptimedb: endpoint must be http(s), got ${parsed.protocol}`)
   }
   if (/\/v1\/(traces|metrics|logs)\/?$/.test(parsed.pathname)) {
-    throw new Error(`dsh-plugin-greptimedb: endpoint must be the OTLP base URL without a per-signal path, got ${parsed.pathname}`)
+    throw new Error(`@tma1-ai/dsh-plugin-greptimedb: endpoint must be the OTLP base URL without a per-signal path, got ${parsed.pathname}`)
   }
   return parsed
 }
@@ -213,7 +213,7 @@ function nonEmpty(value: string | undefined): string | undefined {
 function duration(value: number | undefined, fallback: number, field: string): number {
   if (value === undefined) return fallback
   if (!Number.isFinite(value) || value <= 0 || value > MAX_TIMER_DELAY_MILLIS) {
-    throw new Error(`dsh-plugin-greptimedb: ${field} must be a positive finite number no greater than ${MAX_TIMER_DELAY_MILLIS}, got ${String(value)}`)
+    throw new Error(`@tma1-ai/dsh-plugin-greptimedb: ${field} must be a positive finite number no greater than ${MAX_TIMER_DELAY_MILLIS}, got ${String(value)}`)
   }
   return value
 }
@@ -221,7 +221,7 @@ function duration(value: number | undefined, fallback: number, field: string): n
 function count(value: number | undefined, fallback: number, field: string): number {
   if (value === undefined) return fallback
   if (!Number.isInteger(value) || value < 1) {
-    throw new Error(`dsh-plugin-greptimedb: ${field} must be a positive integer, got ${String(value)}`)
+    throw new Error(`@tma1-ai/dsh-plugin-greptimedb: ${field} must be a positive integer, got ${String(value)}`)
   }
   return value
 }

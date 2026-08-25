@@ -28,7 +28,7 @@ import type { ResolvedConfig } from './config.js'
 import { createInstruments, type Instruments } from './metrics.js'
 
 /** Instrumentation scope reported for every span, metric, and log record. */
-export const SCOPE_NAME = 'dsh-plugin-greptimedb'
+export const SCOPE_NAME = '@tma1-ai/dsh-plugin-greptimedb'
 
 /** Where a reported failure came from, so the log line can say which. */
 export type FailureStage = 'export' | 'shutdown'
@@ -207,7 +207,7 @@ async function shutdownAll(
   let timer: ReturnType<typeof setTimeout> | undefined
   const deadline = new Promise<never>((_resolve, reject) => {
     timer = setTimeout(
-      () => { reject(new Error(`dsh-plugin-greptimedb: telemetry shutdown exceeded ${timeoutMillis}ms`)) },
+      () => { reject(new Error(`@tma1-ai/dsh-plugin-greptimedb: telemetry shutdown exceeded ${timeoutMillis}ms`)) },
       timeoutMillis,
     )
   })

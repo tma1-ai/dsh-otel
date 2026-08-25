@@ -9,7 +9,7 @@
  * cordis dispatches these listeners on the loop's own path and a throw would
  * reach the agent.
  *
- * @module dsh-plugin-greptimedb
+ * @module @tma1-ai/dsh-plugin-greptimedb
  */
 
 import { createRequire } from 'node:module'

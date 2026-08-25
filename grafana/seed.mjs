@@ -6,7 +6,7 @@
  * It drives the plugin's own recorder and log emitter, so what lands is
  * byte-identical to what a live session produces.
  *
- *   node grafana/seed.mjs [--endpoint http://localhost:4000/v1/otlp] [--turns 60]
+ *   node grafana/seed.mjs [--endpoint URL] [--turns 60] [--spread-hours 6]
  *
  * @module grafana/seed
  */
@@ -19,6 +19,9 @@ for (let i = 2; i < process.argv.length; i += 2) args.set(process.argv[i], proce
 const endpoint = args.get('--endpoint') ?? 'http://localhost:4000/v1/otlp'
 const turnCount = Number(args.get('--turns') ?? '60')
 const logTable = args.get('--log-table') ?? 'dsh_logs'
+// Spread across the window a dashboard opens on, so the charts have shape
+// rather than one dense spike at the right edge.
+const spreadHours = Number(args.get('--spread-hours') ?? '6')
 
 const MODELS = ['deepseek-chat', 'deepseek-reasoner']
 const TOOLS = ['bash', 'read_file', 'edit_file', 'web_search', 'todo_write']
@@ -40,7 +43,7 @@ const config = resolveConfig({
   metricIntervalMillis: 5_000,
 })
 const errors = []
-const pipeline = createPipeline(config, '0.0.0-seed', error => errors.push(error))
+const pipeline = createPipeline(config, '0.0.0-seed', (stage, error) => errors.push(`${stage}: ${String(error)}`))
 if (!pipeline.tracer || !pipeline.instruments || !pipeline.logger) {
   throw new Error('seed needs all three signals enabled')
 }
@@ -48,9 +51,8 @@ if (!pipeline.tracer || !pipeline.instruments || !pipeline.logger) {
 let seq = 0
 const event = (type, data, time) => ({ type, seq: seq++, time, data })
 
-/** Spread the seeded activity over the last hour so time-range panels have shape. */
 const now = Date.now()
-const span = 60 * 60 * 1000
+const span = spreadHours * 60 * 60 * 1000
 let emitted = 0
 
 for (let turn = 1; turn <= turnCount; turn += 1) {

@@ -1,9 +1,9 @@
-# dsh-plugin-greptimedb
+# @tma1-ai/dsh-plugin-greptimedb
 
-[![npm](https://img.shields.io/npm/v/dsh-plugin-greptimedb.svg)](https://www.npmjs.com/package/dsh-plugin-greptimedb)
+[![npm](https://img.shields.io/npm/v/@tma1-ai/dsh-plugin-greptimedb.svg)](https://www.npmjs.com/package/@tma1-ai/dsh-plugin-greptimedb)
 [![CI](https://github.com/tma1-ai/dsh-otel/actions/workflows/ci.yml/badge.svg)](https://github.com/tma1-ai/dsh-otel/actions/workflows/ci.yml)
-[![node](https://img.shields.io/node/v/dsh-plugin-greptimedb.svg)](https://nodejs.org)
-[![license](https://img.shields.io/npm/l/dsh-plugin-greptimedb.svg)](LICENSE)
+[![node](https://img.shields.io/node/v/@tma1-ai/dsh-plugin-greptimedb.svg)](https://nodejs.org)
+[![license](https://img.shields.io/npm/l/@tma1-ai/dsh-plugin-greptimedb.svg)](LICENSE)
 
 [English](README.md) | 中文
 
@@ -22,27 +22,17 @@ ORDER BY duration_nano DESC
 LIMIT 10;
 ```
 
-```sql
--- 各模型的缓存命中情况
-SELECT "span_attributes.gen_ai.request.model" AS model,
-       SUM("span_attributes.dsh.usage.cache_read_tokens") AS cached,
-       SUM("span_attributes.gen_ai.usage.input_tokens") AS billed
-FROM opentelemetry_traces
-WHERE span_name LIKE 'chat%'
-GROUP BY model;
-```
-
 ## 安装
 
 ```sh
-dsh plugin --profile headless add dsh-plugin-greptimedb
+dsh plugin --profile headless add @tma1-ai/dsh-plugin-greptimedb
 ```
 
 包自带 bundle patch，这一条命令就把它接进 profile。要指向自己的数据库，在 `$DSH_HOME/profiles/<name>/cordis.patch.yml` 里覆盖这一行：
 
 ```yaml
 - id: greptimedb-otel
-  name: 'dsh-plugin-greptimedb'
+  name: '@tma1-ai/dsh-plugin-greptimedb'
   config:
     endpoint: https://<host>/v1/otlp
     database: <dbname>
@@ -74,9 +64,7 @@ docker run -p 127.0.0.1:4000-4003:4000-4003 \
 | `serviceName` | `dsh` | OTel `service.name`。 |
 | `logTable` / `traceTable` | GreptimeDB 默认 | 覆盖目标表名。 |
 | `shutdownTimeoutMillis` | `3000` | 整个退出流程的截止时间。 |
-| `metricIntervalMillis` | `30000` | metric 采集周期，不得小于 `exportTimeoutMillis`。 |
-| `maxExportBatchSize` / `maxQueueSize` | `512` / `2048` | 批量与缓冲上限。 |
-| `scheduledDelayMillis` / `exportTimeoutMillis` | `5000` / `30000` | 导出节奏与单次请求超时。 |
+| `metricIntervalMillis`、`maxExportBatchSize`、`maxQueueSize`、`scheduledDelayMillis`、`exportTimeoutMillis` | SDK 默认值 | 批量与导出调优。`metricIntervalMillis` 不得小于 `exportTimeoutMillis`。 |
 
 配置写错会在插件加载时就报错并指明字段，不会拖到第一次导出。
 
@@ -140,9 +128,9 @@ WHERE session_id = '...' AND event_type = 'tool/result'
 ORDER BY timestamp;
 ```
 
-所有属性用下划线命名是有原因的。GreptimeDB 把未提取的属性放在 JSON 列里，用 `json_get_string()` 读取，而它会把 `session.id` 这种带点的键当成嵌套路径，取不出来。
+属性用下划线命名，是因为 GreptimeDB 把未提取的属性放在 JSON 列里，用 `json_get_string()` 读，而它会把 `session.id` 这种带点的键当成嵌套路径，取不出来。
 
-`assistant/chunk` 永不导出。一个 session 里有几万条 token 增量，而它们承载的事实汇总后的 `assistant/message` 里都有。
+`assistant/chunk` 永不导出：一个 session 几万条 token 增量，承载的事实汇总后的 `assistant/message` 里都有。
 
 ## 导出内容
 
@@ -154,11 +142,9 @@ ORDER BY timestamp;
 | `full` | 增加用户与助手的消息正文、工具参数、工具结果。 |
 | `full+prompt` | 增加 `request/header`：完整 system prompt 和全部工具 schema。 |
 
-有两样东西在任何模式下都不会离开进程。工具私有的 `meta` 载荷，设计上就是不透明且任意的。失败 turn 的内部 `error.message`，是可能回显 prompt 的 provider 文本。
+有两样东西在任何模式下都不离开进程：工具私有的 `meta` 载荷（设计上就不透明且任意），以及失败 turn 的内部 `error.message`（可能回显 prompt 的 provider 文本）。
 
-投影层是正向白名单。插件不认识的事件类型，包括未来某个 DSH 插件声明的，只导出身份标识。如果用通用的 `event.data` 克隆，这类事件携带的任何内容都会被悄悄带出去。
-
-作为对比，DSH 自带的 `session-telemetry-otel` 默认方向相反：它的 `FULL` 模式发送完整 `event.data`，含 system prompt，且自身不带任何脱敏规则。
+投影层是正向白名单，插件不认识的事件类型——包括未来某个 DSH 插件声明的——只导出身份标识。DSH 自带的 `session-telemetry-otel` 默认方向相反：`FULL` 模式发送完整 `event.data`，含 system prompt，且自身不带任何脱敏规则。
 
 ## Dashboard
 
@@ -167,6 +153,8 @@ ORDER BY timestamp;
 ```sh
 cd grafana && docker compose up -d && open http://localhost:3000
 ```
+
+![Overview](https://raw.githubusercontent.com/tma1-ai/dsh-otel/main/grafana/screenshots/overview.png)
 
 ![Trace explorer](https://raw.githubusercontent.com/tma1-ai/dsh-otel/main/grafana/screenshots/trace-explorer.png)
 
@@ -197,26 +185,15 @@ pnpm smoke    # 针对新打包 tarball 的打包检查
 GREPTIMEDB_OTLP_ENDPOINT=http://localhost:4000/v1/otlp pnpm test   # 追加真实数据库往返
 ```
 
-四层测试，每层抓的是下面几层抓不到的问题：
-
-| 层次 | 只有它能抓到的 |
-|---|---|
-| 单测 | span 状态机、token 口径、投影白名单 |
-| Profile 组装 | bundle patch 无法解析、无法 parse、组装不出 entry |
-| Loader 启动 | 裸包名解析、`!!js` 求值、`inject` 满足、真实 OTLP 字节与 header |
-| 真实 GreptimeDB | trace pipeline 接受、提取列生效、SQL 可见的数值 |
+分四层，因为每层抓的是下面几层抓不到的：单测覆盖 span 状态机和投影白名单，profile 组装抓 bundle patch 解析不了或组装不出 entry，Loader 启动抓裸包名解析和真实 OTLP 字节，真实 GreptimeDB 抓 trace pipeline 接受与 SQL 可见的数值。
 
 ## 已知限制
 
-**DSH 处于 pre-release。** 官方声明首个正式版本之前会自由重命名和重组包结构。本插件只读 session 事件流和已文档化的 payload 字段，peer 版本锁定在实际测试过的版本（`0.1.1-rc.2`）。
-
-**GenAI 语义规范仍是 experimental。** 属性名取自 `@opentelemetry/semantic-conventions/incubating`，会随它变动。span 上同时带 `gen_ai.provider.name` 和已废弃的 `gen_ai.system`，值相同：现存的 GenAI dashboard 都按旧名过滤，不带它的 span 在那些面板里根本不出现。
-
-**不做逐 turn flush。** 导出遵循 batch processor 自身的节奏。逐 turn 强制 flush 会成为这条管线唯一的并发 flush 来源，它与关闭时的 drain 交互会丢失尾部记录。
-
-**关闭有时限，但时限无法取消传输。** `shutdownTimeoutMillis` 到期时仍在途的记录可能在进程退出时丢失。另一种选择是无限等待，那会把 CLI 挂死。
-
-**Subagent session 有自己独立的 trace。** 每个 session 的 span 自成一棵树，不会拼接进父 session 的 trace。
+- **DSH 处于 pre-release**，官方声明首个正式版本前会自由重命名和重组包结构。本插件只读 session 事件流和已文档化的 payload 字段，peer 版本锁定在实际测试过的版本（`0.1.1-rc.2`）。
+- **GenAI 语义规范仍是 experimental。** 名字取自 `@opentelemetry/semantic-conventions/incubating`，会随它变动。span 同时带 `gen_ai.provider.name` 和已废弃的 `gen_ai.system`，因为现存 dashboard 都按旧名过滤。
+- **不做逐 turn flush。** 导出遵循 batch processor 自身节奏。逐 turn 强制 flush 会成为这条管线唯一的并发 flush 来源，与关闭时的 drain 交互会丢失尾部记录。
+- **关闭有时限，但时限无法取消传输。** `shutdownTimeoutMillis` 到期时仍在途的记录可能在退出时丢失。另一种选择是无限等待，那会把 CLI 挂死。
+- **Subagent session 有独立 trace。** 每个 session 的 span 自成一棵树，不拼接进父 session。
 
 ## License
 

@@ -1,6 +1,8 @@
 # Grafana dashboards
 
-Four provisioned dashboards over the data `dsh-plugin-greptimedb` writes, plus a compose stack that brings up GreptimeDB and Grafana together.
+Four provisioned dashboards over the data `@tma1-ai/dsh-plugin-greptimedb` writes, plus a compose stack that brings up GreptimeDB and Grafana together.
+
+![Overview](screenshots/overview.png)
 
 ![Trace explorer](screenshots/trace-explorer.png)
 
@@ -39,7 +41,7 @@ The waterfall shows `invoke_agent dsh` with `chat` and `execute_tool` spans dire
 
 Two, because they do different jobs:
 
-- **GreptimeDB** (`mysql`) — GreptimeDB speaks the MySQL wire protocol, so Grafana's built-in datasource reads it with nothing to install. Every SQL panel uses this. Column names containing dots need backticks.
+- **GreptimeDB** (`mysql`) — GreptimeDB speaks the MySQL wire protocol, so Grafana's built-in datasource reads it with nothing to install. Every SQL panel uses this. Two things to know when editing a query: column names containing dots need backticks, and a Postgres-style interval literal (`INTERVAL '5 minutes'`) is rejected over this protocol even though GreptimeDB's HTTP API accepts it. Use a cast — `date_bin('5 minutes'::INTERVAL, timestamp)` — or the MySQL spelling `INTERVAL 5 MINUTE`.
 - **GreptimeDB-Traces** (`info8fcc-greptimedb-datasource`) — GreptimeDB's own plugin, installed by the compose file. Only it can turn the trace table into Grafana's trace model, which is what the waterfall needs.
 
 ## Verifying the panels

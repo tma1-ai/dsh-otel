@@ -19,7 +19,7 @@ import { composeEntries, loadProfile, writeProfileManifest, type Profile } from 
 import type { EntryOptions } from '@deepseek-ai/cordis-plugin-loader'
 import { TARBALL_ENV } from './global-setup.js'
 
-const PACKAGE_NAME = 'dsh-plugin-greptimedb'
+const PACKAGE_NAME = '@tma1-ai/dsh-plugin-greptimedb'
 const PROFILE_NAME = 'e2e'
 
 let home: string
