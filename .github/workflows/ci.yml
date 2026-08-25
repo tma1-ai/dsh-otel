@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22', '24']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm run typecheck
+
+      - run: pnpm run build
+
+      # A service container cannot carry the `standalone start` arguments the
+      # image needs, so the database is started explicitly.
+      - name: Start GreptimeDB
+        run: |
+          docker run -d --name greptimedb -p 4000:4000 -p 4001:4001 \
+            greptime/greptimedb:v1.0.0 standalone start \
+            --http-addr 0.0.0.0:4000 --rpc-bind-addr 0.0.0.0:4001
+          for i in $(seq 1 40); do
+            curl -sf http://localhost:4000/health && exit 0
+            sleep 1
+          done
+          echo "GreptimeDB did not become healthy" >&2
+          docker logs greptimedb
+          exit 1
+
+      - name: Test
+        run: pnpm run test
+        env:
+          GREPTIMEDB_OTLP_ENDPOINT: http://localhost:4000/v1/otlp
+          GREPTIMEDB_SQL_URL: http://localhost:4000/v1/sql
+
+      - name: Packaging smoke
+        run: pnpm run smoke
+
+      - name: GreptimeDB logs
+        if: failure()
+        run: docker logs greptimedb

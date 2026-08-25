@@ -1,20 +1,35 @@
 # dsh-plugin-greptimedb
 
+[![npm](https://img.shields.io/npm/v/dsh-plugin-greptimedb.svg)](https://www.npmjs.com/package/dsh-plugin-greptimedb)
+[![CI](https://github.com/tma1-ai/dsh-otel/actions/workflows/ci.yml/badge.svg)](https://github.com/tma1-ai/dsh-otel/actions/workflows/ci.yml)
+[![node](https://img.shields.io/node/v/dsh-plugin-greptimedb.svg)](https://nodejs.org)
+[![license](https://img.shields.io/npm/l/dsh-plugin-greptimedb.svg)](LICENSE)
+
 English | [中文](README.zh.md)
 
-OpenTelemetry traces, metrics, and logs for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness), written straight into [GreptimeDB](https://github.com/GreptimeTeam/greptimedb).
+Send [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) telemetry to [GreptimeDB](https://github.com/GreptimeTeam/greptimedb) as OpenTelemetry traces, metrics, and logs.
 
-No collector, no sidecar, no patch to DSH. It is an ordinary DSH plugin: install it, name it in your profile, and every turn, model call, and tool execution lands in one database you can query with SQL.
+No collector. No sidecar. No fork of DSH. It installs as an ordinary plugin, and every turn, model call, and tool execution becomes a row you can query:
 
 ```sql
+-- Slowest tool calls, with the model that requested them
 SELECT span_name,
        "span_attributes.gen_ai.request.model" AS model,
-       "span_attributes.gen_ai.usage.input_tokens" AS input_tokens,
        duration_nano / 1000000 AS ms
 FROM opentelemetry_traces
 WHERE span_name LIKE 'execute_tool%'
 ORDER BY duration_nano DESC
 LIMIT 10;
+```
+
+```sql
+-- Cache hit rate per model
+SELECT "span_attributes.gen_ai.request.model" AS model,
+       SUM("span_attributes.dsh.usage.cache_read_tokens") AS cached,
+       SUM("span_attributes.gen_ai.usage.input_tokens") AS billed
+FROM opentelemetry_traces
+WHERE span_name LIKE 'chat%'
+GROUP BY model;
 ```
 
 ## Install
@@ -23,7 +38,7 @@ LIMIT 10;
 dsh plugin --profile headless add dsh-plugin-greptimedb
 ```
 
-The package ships a bundle patch, so that command wires it into the profile. Point it at your database by overriding the row in `$DSH_HOME/profiles/<name>/cordis.patch.yml`:
+The package ships a bundle patch, so that one command wires it into the profile. To point it at your own database, override the row in `$DSH_HOME/profiles/<name>/cordis.patch.yml`:
 
 ```yaml
 - id: greptimedb-otel
@@ -35,9 +50,9 @@ The package ships a bundle patch, so that command wires it into the profile. Poi
     password: <password>
 ```
 
-A profile patch **replaces** the row's whole `config` rather than merging into it, so restate every field you keep.
+A profile patch replaces the row's whole `config` instead of merging into it, so restate every field you want to keep.
 
-For a local GreptimeDB the defaults already work:
+The defaults already point at a local GreptimeDB:
 
 ```sh
 docker run -p 127.0.0.1:4000-4003:4000-4003 \
@@ -47,27 +62,27 @@ docker run -p 127.0.0.1:4000-4003:4000-4003 \
   --mysql-addr 0.0.0.0:4002 --postgres-addr 0.0.0.0:4003
 ```
 
-## Config
+## Configuration
 
 | Key | Default | Notes |
 |---|---|---|
-| `endpoint` | *(required)* | OTLP **base** URL, e.g. `http://localhost:4000/v1/otlp`. Each signal's `/v1/{traces,metrics,logs}` suffix is appended for you; a per-signal path here is rejected at load. |
+| `endpoint` | *(required)* | OTLP **base** URL, e.g. `http://localhost:4000/v1/otlp`. The plugin appends each signal's `/v1/{traces,metrics,logs}` suffix; a per-signal path is rejected at load. |
 | `database` | `public` | Sent as `X-Greptime-DB-Name`. |
-| `username` / `password` | *(none)* | Basic auth. Must be set together. |
-| `signals` | all three | Any subset of `traces`, `metrics`, `logs`. A disabled signal builds no exporter at all. |
+| `username` / `password` | *(none)* | Basic auth. Both or neither. |
+| `signals` | all three | Any subset of `traces`, `metrics`, `logs`. A disabled signal builds no exporter. |
 | `content` | `none` | How much payload may leave the process. See [What leaves the machine](#what-leaves-the-machine). |
 | `serviceName` | `dsh` | OTel `service.name`. |
-| `logTable` / `traceTable` | GreptimeDB defaults | Override the destination tables. |
-| `shutdownTimeoutMillis` | `3000` | Outer deadline for the **whole** teardown sequence. |
-| `metricIntervalMillis` | `30000` | Metric collection period. Must be ≥ `exportTimeoutMillis`. |
+| `logTable` / `traceTable` | GreptimeDB defaults | Destination table overrides. |
+| `shutdownTimeoutMillis` | `3000` | Deadline for the entire teardown sequence. |
+| `metricIntervalMillis` | `30000` | Metric collection period. Must be at least `exportTimeoutMillis`. |
 | `maxExportBatchSize` / `maxQueueSize` | `512` / `2048` | Batch and buffer bounds. |
 | `scheduledDelayMillis` / `exportTimeoutMillis` | `5000` / `30000` | Export cadence and per-request deadline. |
 
-Misconfiguration fails at plugin load with the field named, not later at the first export.
+Bad configuration fails at plugin load with the offending field named, not at the first export.
 
 ## Traces
 
-Turn spans are roots; chat and tool spans are their **siblings**, correlated by `dsh.step`.
+Turn spans are roots. Chat and tool spans hang off them as siblings, correlated by `dsh.step`:
 
 ```
 invoke_agent dsh              turn/start → turn/end
@@ -76,31 +91,31 @@ invoke_agent dsh              turn/start → turn/end
 └── chat deepseek-chat
 ```
 
-They are siblings, not nested, because DSH appends `assistant/message` and only *then* executes the tools that message requested. A tool span nested under a chat span would begin entirely after its parent ended, breaking every waterfall and latency view.
+Siblings, not nesting. DSH appends `assistant/message` first and executes the requested tools afterwards, so a tool span nested under a chat span would start after its parent ended. That breaks waterfall and latency views.
 
-Every timestamp comes from the session event that justifies it, never from a clock read at handling time.
+Timestamps come from the session event that justifies them, never from a clock read while handling it.
 
 A chat span closes on one of four paths, each with a defined end time:
 
 | Situation | End time | Status |
 |---|---|---|
 | Model responded | `assistant/message` | OK |
-| Response interrupted mid-stream | `assistant/message` | OK, plus `dsh.response.interrupted` |
-| Request failed | that step's `step/end` | ERROR, with the exception recorded |
-| No end event at all (crash, teardown) | last event seen | UNSET, plus `dsh.span.unclosed` |
+| Stream interrupted | `assistant/message` | OK, plus `dsh.response.interrupted` |
+| Request failed | that step's `step/end` | ERROR, exception recorded |
+| No end event (crash, teardown) | last event seen | UNSET, plus `dsh.span.unclosed` |
 
-The last row is only for genuinely missing boundaries — a failed request is measured, not written off as unclosed.
+The last row covers genuinely missing boundaries only. A failed request is measured, not written off.
 
 ### Token accounting
 
-DSH reports **disjoint** counts: `inputTokens` is uncached input only, with cache reads and writes accounted separately. The GenAI convention's `gen_ai.usage.input_tokens` is the *billed* total, so this plugin exports:
+DSH reports disjoint counts. `inputTokens` is uncached input alone; cache reads and writes are separate fields. The GenAI convention's `gen_ai.usage.input_tokens` is the billed total, so the plugin exports:
 
 ```
 gen_ai.usage.input_tokens  = inputTokens + cacheReadTokens + cacheWriteTokens
-gen_ai.usage.output_tokens = outputTokens          (already includes reasoning tokens)
+gen_ai.usage.output_tokens = outputTokens          (reasoning tokens included)
 ```
 
-Exporting `inputTokens` alone would understate every cached request — often by an order of magnitude. The breakdown stays queryable as `dsh.usage.uncached_input_tokens`, `dsh.usage.cache_read_tokens`, `dsh.usage.cache_write_tokens`, and `dsh.usage.reasoning_tokens`.
+Exporting `inputTokens` alone understates every cached request, often by an order of magnitude. The breakdown stays queryable as `dsh.usage.uncached_input_tokens`, `dsh.usage.cache_read_tokens`, `dsh.usage.cache_write_tokens`, and `dsh.usage.reasoning_tokens`.
 
 ## Metrics
 
@@ -110,13 +125,13 @@ Exporting `inputTokens` alone would understate every cached request — often by
 | `gen_ai.client.operation.duration` | Histogram | `gen_ai.operation.name`, model |
 | `dsh.token.detail` | Histogram | `dsh.token.detail_kind` (`cache_read`/`cache_write`/`reasoning`) |
 | `dsh.tool.invocations` | Counter | `gen_ai.tool.name`, `dsh.tool.outcome` |
-| `dsh.turns` / `dsh.steps` | Counter | — |
+| `dsh.turns` / `dsh.steps` | Counter | |
 
-Cache and reasoning counts stay off the standard token histogram so a naive `SUM()` over it cannot double-count.
+Cache and reasoning counts stay off the standard token histogram so a plain `SUM()` over it cannot double-count.
 
 ## Logs
 
-One record per session event. Four attributes are promoted to real columns via `X-Greptime-Log-Extract-Keys`:
+One record per session event. Four attributes become real columns through `X-Greptime-Log-Extract-Keys`:
 
 ```sql
 SELECT session_id, event_type, turn, step, body
@@ -125,60 +140,64 @@ WHERE session_id = '...' AND event_type = 'tool/result'
 ORDER BY timestamp;
 ```
 
-This is why every attribute here is underscore-named. GreptimeDB stores unextracted attributes in a JSON column read with `json_get_string()`, which interprets a dotted key like `session.id` as a nested path and cannot address it.
+Every attribute is underscore-named for a reason. GreptimeDB keeps unextracted attributes in a JSON column read with `json_get_string()`, which treats a dotted key like `session.id` as a nested path and cannot address it.
 
-`assistant/chunk` is never exported — tens of thousands of token deltas per session, every fact already present in the assembled message.
+`assistant/chunk` is never exported. It runs to tens of thousands of token deltas per session, and the assembled message already carries every fact they hold.
 
 ## What leaves the machine
 
-`content` controls this, and the default withholds all payloads.
+`content` decides this. The default withholds all payloads.
 
 | Mode | Exported |
 |---|---|
-| `none` *(default)* | Structure and accounting only: event types, turn/step numbers, token counts, tool names, durations, outcomes, error `name`/`code`. |
-| `full` | Adds user and assistant message content, tool arguments, and tool results. |
-| `full+prompt` | Adds `request/header` — the complete system prompt and every tool schema. |
+| `none` *(default)* | Structure and accounting: event types, turn and step numbers, token counts, tool names, durations, outcomes, error `name` and `code`. |
+| `full` | Adds user and assistant message content, tool arguments, tool results. |
+| `full+prompt` | Adds `request/header`: the complete system prompt and every tool schema. |
 
-Two things are withheld in **every** mode: a tool's private `meta` payload (opaque and arbitrary by design), and the internal `error.message` of a failed turn (provider text that can quote the prompt back).
+Two things never leave, in any mode. A tool's private `meta` payload is opaque and arbitrary by design. The internal `error.message` of a failed turn is provider text that can quote the prompt back.
 
-The projection is a positive allowlist. An event type this plugin does not know — including one a future DSH plugin declares — exports its identity and nothing else. A generic clone of `event.data` would have silently started leaking whatever that type happens to carry.
+The projection is a positive allowlist. An event type the plugin does not know, including one a future DSH plugin declares, exports its identity and nothing else. A generic clone of `event.data` would quietly start leaking whatever that type happens to carry.
 
-DSH's own `session-telemetry-otel` takes the opposite default: its `FULL` mode ships the complete `event.data`, system prompt included, with no redaction rules of its own.
+For contrast, DSH's own `session-telemetry-otel` defaults the other way: its `FULL` mode ships the complete `event.data`, system prompt included, with no redaction rules of its own.
 
-## Using it with TMA1
+## With TMA1
 
-[TMA1](https://github.com/tma1-ai/tma1) proxies OTLP to a GreptimeDB it manages. Point `endpoint` at it and DSH appears in the OTel GenAI view with no further setup:
+[TMA1](https://github.com/tma1-ai/tma1) proxies OTLP into a GreptimeDB it manages. Point `endpoint` at it and DSH shows up in the OTel GenAI view:
 
 ```yaml
 endpoint: http://localhost:14318/v1/otlp
 ```
 
-TMA1's `tma1_token_usage_1m` / `cost_1m` / `latency_1m` / `status_1m` flow tables derive from `span_attributes.gen_ai.*`, which this plugin populates by convention.
+TMA1's `tma1_token_usage_1m`, `cost_1m`, `latency_1m`, and `status_1m` flow tables derive from `span_attributes.gen_ai.*`, which this plugin populates by convention.
 
 ## Development
 
 ```sh
-pnpm test     # unit + packaging + Loader e2e
+pnpm test     # unit, profile composition, Loader boot
 pnpm smoke    # packaging checks against a freshly packed tarball
-GREPTIMEDB_OTLP_ENDPOINT=http://localhost:4000/v1/otlp pnpm test   # adds the live-database round trip
+GREPTIMEDB_OTLP_ENDPOINT=http://localhost:4000/v1/otlp pnpm test   # adds the live database round trip
 ```
 
-Four tiers, each catching what the one below cannot:
+Four tiers, each catching what the ones below cannot:
 
-| Tier | What only it can catch |
+| Tier | What only it catches |
 |---|---|
 | Unit | Span state machine, token arithmetic, projection allowlist |
-| Profile composition | A bundle patch that does not resolve, parse, or compose into an entry |
+| Profile composition | A bundle patch that fails to resolve, parse, or compose into an entry |
 | Loader boot | Bare-name resolution, `!!js` evaluation, `inject` satisfaction, real OTLP bytes and headers |
 | Live GreptimeDB | Trace pipeline acceptance, extracted log columns, SQL-visible values |
 
 ## Known limitations
 
-- **DSH is pre-release.** It reserves the right to rename and repackage freely before its first tagged release. This plugin reads only the session event stream and the documented payload fields, and its peer range is pinned to the version it is tested against (`0.1.1-rc.2`).
-- **The GenAI conventions are experimental.** Attribute names come from `@opentelemetry/semantic-conventions/incubating` and move with it. `gen_ai.system` is deliberately not emitted — it is deprecated in favour of `gen_ai.provider.name`.
-- **No per-turn flush.** Export follows the batch processors' own cadence. Forcing a flush per turn would be this pipeline's only source of concurrent flushes, whose interaction with the shutdown drain drops tail records.
-- **Shutdown is bounded, and the bound cannot cancel a transport.** Records still in flight when `shutdownTimeoutMillis` expires may be lost at process exit. The alternative — an unbounded wait — hangs the CLI.
-- **Subagent sessions get their own trace.** Each session's spans form a separate tree; they are not stitched into the parent session's trace.
+**DSH is pre-release.** It reserves the right to rename and repackage freely before its first tagged release. This plugin reads only the session event stream and documented payload fields, and pins its peer range to the version it is tested against (`0.1.1-rc.2`).
+
+**The GenAI conventions are experimental.** Attribute names come from `@opentelemetry/semantic-conventions/incubating` and move with it. `gen_ai.system` is not emitted; it is deprecated in favour of `gen_ai.provider.name`.
+
+**No per-turn flush.** Export follows the batch processors' own cadence. A forced flush per turn would be this pipeline's only source of concurrent flushes, and their interaction with the shutdown drain drops tail records.
+
+**Shutdown is bounded, and the bound cannot cancel a transport.** Records still in flight when `shutdownTimeoutMillis` expires may be lost at process exit. The alternative, an unbounded wait, hangs the CLI.
+
+**Subagent sessions get their own trace.** Each session's spans form a separate tree. They are not stitched into the parent session's trace.
 
 ## License
 
