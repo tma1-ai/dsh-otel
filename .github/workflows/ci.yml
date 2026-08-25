@@ -37,7 +37,7 @@ jobs:
       - name: Start GreptimeDB
         run: |
           docker run -d --name greptimedb -p 4000:4000 -p 4001:4001 \
-            greptime/greptimedb:v1.0.0 standalone start \
+            greptime/greptimedb:v1.2.0-beta.2 standalone start \
             --http-addr 0.0.0.0:4000 --rpc-bind-addr 0.0.0.0:4001
           for i in $(seq 1 40); do
             curl -sf http://localhost:4000/health && exit 0
