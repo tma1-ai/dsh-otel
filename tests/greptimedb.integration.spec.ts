@@ -14,7 +14,7 @@ import { createPipeline } from '../src/lifecycle.js'
 import { resolveConfig } from '../src/config.js'
 import { emitEvent } from '../src/logs.js'
 import { SessionRecorder } from '../src/recorder.js'
-import { assistantMessage, event, resetSeq, toolResult, userMessage, T0 } from './fixtures.js'
+import { assistantMessage, callId, event, resetSeq, toolResult, userMessage, T0 } from './fixtures.js'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 
 const ENDPOINT = process.env['GREPTIMEDB_OTLP_ENDPOINT']
@@ -65,8 +65,8 @@ function seededEvents(): SessionEvent[] {
       usage: { inputTokens: 100, outputTokens: 50, cacheReadTokens: 900, cacheWriteTokens: 20, reasoningTokens: 30 },
       toolCalls: [{ id: 'call-1', name: 'bash' }],
     }),
-    event('tool/call', { turn: 1, step: 1, callId: 'call-1', name: 'bash', arguments: '{"command":"ls"}' }, T0 + 110),
-    toolResult({ turn: 1, step: 1, callId: 'call-1', time: T0 + 300, isError: false, text: 'a.txt' }),
+    event('tool/call', { turn: 1, step: 1, callId: callId('call-1'), name: 'bash', arguments: '{"command":"ls"}' }, T0 + 110),
+    toolResult({ turn: 1, step: 1, callId: callId('call-1'), time: T0 + 300, isError: false, text: 'a.txt' }),
     event('step/end', { turn: 1, step: 1 }, T0 + 310),
     event('turn/end', { turn: 1, reason: { kind: 'completed' } }, T0 + 320),
   ]

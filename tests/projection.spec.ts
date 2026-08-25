@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { SessionEvent, SessionEventMap } from '@deepseek-ai/dsh-session'
 import { projectEvent } from '../src/projection.js'
-import { assistantMessage, event, resetSeq, toolResult, userMessage, T0 } from './fixtures.js'
+import { assistantMessage, callId, event, resetSeq, toolResult, userMessage, T0 } from './fixtures.js'
 
 const SESSION_ID = 'sess-1'
 
@@ -34,14 +34,14 @@ function seeded(): SessionEvent[] {
     event('tool/call', {
       turn: 1,
       step: 1,
-      callId: 'c1',
+      callId: callId('c1'),
       name: 'bash',
       arguments: JSON.stringify({ command: SENTINELS.toolArguments }),
     }, T0 + 5),
     {
-      ...toolResult({ turn: 1, step: 1, callId: 'c1', time: T0 + 6, isError: true, text: SENTINELS.toolResult, error: { name: 'ToolError', code: 'E_RUN' } }),
+      ...toolResult({ turn: 1, step: 1, callId: callId('c1'), time: T0 + 6, isError: true, text: SENTINELS.toolResult, error: { name: 'ToolError', code: 'E_RUN' } }),
       data: {
-        ...(toolResult({ turn: 1, step: 1, callId: 'c1', time: T0 + 6, isError: true, text: SENTINELS.toolResult, error: { name: 'ToolError', code: 'E_RUN' } }).data as object),
+        ...(toolResult({ turn: 1, step: 1, callId: callId('c1'), time: T0 + 6, isError: true, text: SENTINELS.toolResult, error: { name: 'ToolError', code: 'E_RUN' } }).data as object),
         meta: { diff: SENTINELS.toolMeta },
       },
     } as SessionEvent,

@@ -5,7 +5,7 @@ import type { ResourceMetrics } from '@opentelemetry/sdk-metrics'
 import { SpanStatusCode } from '@opentelemetry/api'
 import { SessionRecorder, billedInputTokens } from '../src/recorder.js'
 import { createInstruments } from '../src/metrics.js'
-import { assistantMessage, event, resetSeq, toolResult, T0 } from './fixtures.js'
+import { assistantMessage, callId, event, resetSeq, toolResult, T0 } from './fixtures.js'
 import {
   ATTR_DSH_SPAN_UNCLOSED,
   ATTR_DSH_STEP,
@@ -57,8 +57,8 @@ describe('SessionRecorder span tree', () => {
     recorder.handle(event('step/start', { turn: 1, step: 1 }, T0 + 10))
     recorder.handle(event('request/context', { provider: 'deepseek', model: 'deepseek-chat' }, T0 + 11))
     recorder.handle(assistantMessage({ turn: 1, step: 1, time: T0 + 100, toolCalls: [{ id: 'c1', name: 'bash' }] }))
-    recorder.handle(event('tool/call', { turn: 1, step: 1, callId: 'c1', name: 'bash', arguments: '{}' }, T0 + 110))
-    recorder.handle(toolResult({ turn: 1, step: 1, callId: 'c1', time: T0 + 200 }))
+    recorder.handle(event('tool/call', { turn: 1, step: 1, callId: callId('c1'), name: 'bash', arguments: '{}' }, T0 + 110))
+    recorder.handle(toolResult({ turn: 1, step: 1, callId: callId('c1'), time: T0 + 200 }))
     recorder.handle(event('step/end', { turn: 1, step: 1 }, T0 + 210))
     recorder.handle(event('turn/end', { turn: 1, reason: { kind: 'completed' } }, T0 + 220))
 
@@ -148,7 +148,7 @@ describe('SessionRecorder chat closure paths', () => {
     recorder.handle(event('turn/start', { turn: 1 }, T0))
     recorder.handle(event('step/start', { turn: 1, step: 1 }, T0 + 10))
     recorder.handle(assistantMessage({ turn: 1, step: 1, time: T0 + 100 }))
-    recorder.handle(event('tool/call', { turn: 1, step: 1, callId: 'c1', name: 'bash', arguments: '{}' }, T0 + 110))
+    recorder.handle(event('tool/call', { turn: 1, step: 1, callId: callId('c1'), name: 'bash', arguments: '{}' }, T0 + 110))
     recorder.handle(event('turn/end', { turn: 1, reason: { kind: 'aborted', reason: { kind: 'legacy' } } }, T0 + 300))
 
     const tool = byName(spans.getFinishedSpans(), 'execute_tool')
@@ -160,7 +160,7 @@ describe('SessionRecorder chat closure paths', () => {
     const { recorder, spans } = setup()
     recorder.handle(event('turn/start', { turn: 1 }, T0))
     recorder.handle(event('step/start', { turn: 1, step: 1 }, T0 + 10))
-    recorder.handle(event('tool/call', { turn: 1, step: 1, callId: 'c1', name: 'bash', arguments: '{}' }, T0 + 20))
+    recorder.handle(event('tool/call', { turn: 1, step: 1, callId: callId('c1'), name: 'bash', arguments: '{}' }, T0 + 20))
     recorder.closeAll()
 
     const finished = spans.getFinishedSpans()
@@ -192,8 +192,8 @@ describe('SessionRecorder tool outcome', () => {
   ])('reads the result block for $label', ({ isError, error, expected }) => {
     const { recorder, spans } = setup()
     recorder.handle(event('turn/start', { turn: 1 }, T0))
-    recorder.handle(event('tool/call', { turn: 1, step: 1, callId: 'c1', name: 'bash', arguments: '{}' }, T0 + 10))
-    recorder.handle(toolResult({ turn: 1, step: 1, callId: 'c1', time: T0 + 20, isError, ...error === undefined ? {} : { error } }))
+    recorder.handle(event('tool/call', { turn: 1, step: 1, callId: callId('c1'), name: 'bash', arguments: '{}' }, T0 + 10))
+    recorder.handle(toolResult({ turn: 1, step: 1, callId: callId('c1'), time: T0 + 20, isError, ...error === undefined ? {} : { error } }))
 
     const tool = byName(spans.getFinishedSpans(), 'execute_tool')
     expect(tool.attributes[ATTR_DSH_TOOL_OUTCOME]).toBe(expected)

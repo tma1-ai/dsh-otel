@@ -155,6 +155,23 @@ endpoint: http://localhost:14318/v1/otlp
 
 TMA1 的 `tma1_token_usage_1m` / `cost_1m` / `latency_1m` / `status_1m` 四张 Flow 表由 `span_attributes.gen_ai.*` 派生，本插件按规范填充这些字段。
 
+## 开发
+
+```sh
+pnpm test     # 单测 + 打包 + Loader e2e
+pnpm smoke    # 针对新打包 tarball 的打包检查
+GREPTIMEDB_OTLP_ENDPOINT=http://localhost:4000/v1/otlp pnpm test   # 追加真实数据库往返
+```
+
+四层测试，每层能抓到下层抓不到的问题：
+
+| 层次 | 只有它能抓到的问题 |
+|---|---|
+| 单测 | span 状态机、token 口径、投影白名单 |
+| Profile 组装 | bundle patch 无法解析、无法 parse、组装不出 entry |
+| Loader 启动 | 裸包名解析、`!!js` 求值、`inject` 满足、真实 OTLP 字节与 header |
+| 真实 GreptimeDB | trace pipeline 接受、提取列生效、SQL 可见的数值 |
+
 ## 已知限制
 
 - **DSH 处于 pre-release。** 官方声明首个正式版本之前会自由重命名和重组包结构。本插件只读 session 事件流和已文档化的 payload 字段，peer 版本锁定在实际测试过的版本（`0.1.1-rc.2`）。

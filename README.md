@@ -155,6 +155,23 @@ endpoint: http://localhost:14318/v1/otlp
 
 TMA1's `tma1_token_usage_1m` / `cost_1m` / `latency_1m` / `status_1m` flow tables derive from `span_attributes.gen_ai.*`, which this plugin populates by convention.
 
+## Development
+
+```sh
+pnpm test     # unit + packaging + Loader e2e
+pnpm smoke    # packaging checks against a freshly packed tarball
+GREPTIMEDB_OTLP_ENDPOINT=http://localhost:4000/v1/otlp pnpm test   # adds the live-database round trip
+```
+
+Four tiers, each catching what the one below cannot:
+
+| Tier | What only it can catch |
+|---|---|
+| Unit | Span state machine, token arithmetic, projection allowlist |
+| Profile composition | A bundle patch that does not resolve, parse, or compose into an entry |
+| Loader boot | Bare-name resolution, `!!js` evaluation, `inject` satisfaction, real OTLP bytes and headers |
+| Live GreptimeDB | Trace pipeline acceptance, extracted log columns, SQL-visible values |
+
 ## Known limitations
 
 - **DSH is pre-release.** It reserves the right to rename and repackage freely before its first tagged release. This plugin reads only the session event stream and the documented payload fields, and its peer range is pinned to the version it is tested against (`0.1.1-rc.2`).

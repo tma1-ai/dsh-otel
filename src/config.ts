@@ -94,7 +94,10 @@ export const Config: z<Config> = z.object({
   database: z.string(),
   username: z.string(),
   password: z.string(),
-  signals: z.array(z.union(['traces', 'metrics', 'logs'] as const)),
+  // An array field with no default resolves a missing key to `[]`, which would
+  // silently disable every signal. Scalar fields have no such behavior and are
+  // defaulted in resolveConfig instead.
+  signals: z.array(z.union(['traces', 'metrics', 'logs'] as const)).default([...ALL_SIGNALS]),
   content: z.union(['none', 'full', 'full+prompt'] as const),
   serviceName: z.string(),
   logTable: z.string(),
