@@ -1,0 +1,22 @@
+# The dsh-plugin-greptimedb bundle patch: one row, addressable by its id.
+#
+# A profile patch replaces the targeted row's whole `config` rather than merging
+# into it, so a user override must restate every field it keeps — including
+# `endpoint`, which has no default.
+#
+# The endpoint below points at a local GreptimeDB standalone. Override it in
+# `$DSH_HOME/profiles/<name>/cordis.patch.yml`, or in the home-level
+# `cordis.patch.yml`, which outranks it.
+
+- insert:
+    - id: greptimedb-otel
+      name: 'dsh-plugin-greptimedb'
+      config:
+        endpoint: !!js `${process.env.GREPTIMEDB_OTLP_ENDPOINT ?? 'http://localhost:4000/v1/otlp'}`
+        database: !!js `${process.env.GREPTIMEDB_DATABASE ?? 'public'}`
+        username: !!js `${process.env.GREPTIMEDB_USERNAME ?? ''}`
+        password: !!js `${process.env.GREPTIMEDB_PASSWORD ?? ''}`
+        logTable: dsh_logs
+        # Structure and token accounting only. Raise to `full` to include
+        # conversation and tool payloads; see the README before doing so.
+        content: none

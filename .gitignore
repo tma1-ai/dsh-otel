@@ -1,0 +1,5 @@
+node_modules/
+lib/
+*.tgz
+greptimedb_data/
+.DS_Store
