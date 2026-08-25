@@ -13,8 +13,6 @@ No collector. No sidecar. No fork of DSH. It installs as an ordinary plugin, and
 
 ```sql
 -- Slowest tool calls, with the model that requested them.
--- A tool span carries no model of its own: it is a sibling of the chat span,
--- so the model comes from the chat span of the same trace and step.
 SELECT tool.span_name,
        chat."span_attributes.gen_ai.request.model" AS model,
        tool.duration_nano / 1000000 AS ms
@@ -87,8 +85,6 @@ invoke_agent dsh              turn/start → turn/end
 └── chat deepseek-chat
 ```
 
-They are siblings rather than nested because DSH appends `assistant/message` first and runs the requested tools afterwards. A tool span nested under the chat span would start after its parent had already ended, which breaks every waterfall and latency view.
-
 Every timestamp comes from the session event it belongs to, not from a clock read while the event is being handled.
 
 A chat span closes on one of four paths, each with a defined end time:
@@ -100,18 +96,16 @@ A chat span closes on one of four paths, each with a defined end time:
 | Request failed | that step's `step/end` | ERROR, with the error type |
 | No end event (crash, teardown) | last event seen | UNSET, plus `dsh.span.unclosed` |
 
-The last row is only for a boundary that never arrived. A failed request still gets its real duration.
-
 ### Token accounting
 
-DSH reports disjoint counts. `inputTokens` is uncached input alone; cache reads and writes are separate fields. The GenAI convention's `gen_ai.usage.input_tokens` is the billed total, so the plugin exports:
+DSH's counts are disjoint: `inputTokens` is uncached input alone, cache reads and writes are separate fields. `gen_ai.usage.input_tokens` is the billed total, so the plugin exports:
 
 ```
 gen_ai.usage.input_tokens  = inputTokens + cacheReadTokens + cacheWriteTokens
 gen_ai.usage.output_tokens = outputTokens          (reasoning tokens included)
 ```
 
-Exporting `inputTokens` alone understates every cached request, often by an order of magnitude. The breakdown stays queryable as `dsh.usage.uncached_input_tokens`, `dsh.usage.cache_read_tokens`, `dsh.usage.cache_write_tokens`, and `dsh.usage.reasoning_tokens`.
+The breakdown stays queryable as `dsh.usage.uncached_input_tokens`, `dsh.usage.cache_read_tokens`, `dsh.usage.cache_write_tokens`, and `dsh.usage.reasoning_tokens`.
 
 ## Metrics
 
@@ -122,8 +116,6 @@ Exporting `inputTokens` alone understates every cached request, often by an orde
 | `dsh.token.detail` | Histogram | `dsh.token.detail_kind` (`cache_read`/`cache_write`/`reasoning`) |
 | `dsh.tool.invocations` | Counter | `gen_ai.tool.name`, `dsh.tool.outcome` |
 | `dsh.turns` / `dsh.steps` | Counter | |
-
-Cache and reasoning counts stay off the standard token histogram so a plain `SUM()` over it cannot double-count.
 
 ## Logs
 
@@ -136,9 +128,7 @@ WHERE session_id = '...' AND event_type = 'tool/result'
 ORDER BY timestamp;
 ```
 
-Attributes are underscore-named because GreptimeDB keeps unextracted ones in a JSON column read with `json_get_string()`, which reads a dotted key like `session.id` as a nested path and cannot address it.
-
-`assistant/chunk` is never exported: tens of thousands of token deltas per session, every fact already in the assembled message.
+`assistant/chunk` is never exported; the assembled `assistant/message` carries the same content.
 
 ## What leaves the machine
 
@@ -150,9 +140,9 @@ Attributes are underscore-named because GreptimeDB keeps unextracted ones in a J
 | `full` | Adds user and assistant message content, tool arguments, tool results. |
 | `full+prompt` | Adds `request/header`: the complete system prompt and every tool schema. |
 
-Three things never leave in any mode: a tool's private `meta` payload, the internal `error.message` of a failed turn, and the message and stack of a failed request. All of it is provider or tool text that can quote the prompt back.
+Three things never leave in any mode: a tool's private `meta` payload, the internal `error.message` of a failed turn, and the message and stack of a failed request.
 
-The projection is a positive allowlist, so an event type the plugin does not know — including one a future DSH plugin declares — exports its identity and nothing else. DSH's own `session-telemetry-otel` defaults the other way: its `FULL` mode ships the complete `event.data`, system prompt included, with no redaction rules of its own.
+The projection is a positive allowlist, so an event type the plugin does not know — including one a future DSH plugin declares — exports its identity and nothing else.
 
 ## Dashboards
 
@@ -194,15 +184,13 @@ pnpm smoke    # packaging checks against a freshly packed tarball
 GREPTIMEDB_OTLP_ENDPOINT=http://localhost:4000/v1/otlp pnpm test   # adds the live database round trip
 ```
 
-Four tiers, because each catches what the ones below cannot: unit tests for the span state machine and the projection allowlist, profile composition for a bundle patch that fails to resolve or parse, Loader boot for bare-name resolution and real OTLP bytes, and a live GreptimeDB for trace-pipeline acceptance and SQL-visible values.
-
 ## Known limitations
 
-- **DSH is pre-release** and reserves the right to rename and repackage freely before its first tagged release. This plugin reads only the session event stream and documented payload fields, and its peer range is the exact version CI runs against (`0.1.1-rc.2`) rather than an open upper bound this project cannot vouch for. A new DSH release needs a tested bump here before it is allowed.
-- **The GenAI conventions are experimental.** Names come from `@opentelemetry/semantic-conventions/incubating` and move with it. Spans carry both `gen_ai.provider.name` and the deprecated `gen_ai.system`, because existing dashboards select on the old name.
-- **No per-turn flush.** Export follows the batch processors' cadence. A forced flush per turn would be this pipeline's only source of concurrent flushes, and their interaction with the shutdown drain drops tail records.
-- **Shutdown is bounded, and the bound cannot cancel a transport.** Records in flight when `shutdownTimeoutMillis` expires may be lost at exit. The alternative, an unbounded wait, hangs the CLI.
-- **Subagent sessions get their own trace.** Each session's spans form a separate tree, not stitched into the parent's.
+- **DSH is pre-release** and renames and repackages freely before its first tagged release. The peer range is the exact version CI runs against (`0.1.1-rc.2`); a new DSH release needs a tested bump here.
+- **The GenAI conventions are experimental.** Names come from `@opentelemetry/semantic-conventions/incubating` and move with it. Spans carry both `gen_ai.provider.name` and the deprecated `gen_ai.system`.
+- **No per-turn flush.** Export follows the batch processors' cadence.
+- **Shutdown is bounded.** Records in flight when `shutdownTimeoutMillis` expires may be lost at exit.
+- **Subagent sessions get their own trace**, not stitched into the parent's.
 
 ## License
 

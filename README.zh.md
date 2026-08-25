@@ -13,8 +13,6 @@
 
 ```sql
 -- 最慢的工具调用，以及是哪个模型发起的。
--- tool span 自身不带 model：它是 chat span 的同级节点，
--- 所以 model 取自同一 trace、同一 step 的 chat span。
 SELECT tool.span_name,
        chat."span_attributes.gen_ai.request.model" AS model,
        tool.duration_nano / 1000000 AS ms
@@ -87,8 +85,6 @@ invoke_agent dsh              turn/start → turn/end
 └── chat deepseek-chat
 ```
 
-用同级而非嵌套，是因为 DSH 先写 `assistant/message`，之后才执行这条消息请求的工具。tool span 若挂在 chat span 下，起始时间会晚于父节点的结束时间，waterfall 和延迟视图都会失真。
-
 时间戳取自触发它的那个 session 事件，不取处理时刻的时钟。
 
 chat span 有四条闭合路径，每条都有确定的结束时间：
@@ -100,18 +96,16 @@ chat span 有四条闭合路径，每条都有确定的结束时间：
 | 请求失败 | 该 step 的 `step/end` | ERROR，带错误类型 |
 | 没有结束事件（崩溃、退出） | 最后一个事件的时间 | UNSET，加 `dsh.span.unclosed` |
 
-最后一行只用于边界事件真的没到的情况。失败的请求仍然有真实耗时。
-
 ### Token 口径
 
-DSH 的计数是不相交的。`inputTokens` 只含未命中缓存的输入，缓存读写是独立字段。而 GenAI 规范里的 `gen_ai.usage.input_tokens` 是计费总量，所以插件导出：
+DSH 的计数是不相交的：`inputTokens` 只含未命中缓存的输入，缓存读写是独立字段。而 `gen_ai.usage.input_tokens` 是计费总量，所以插件导出：
 
 ```
 gen_ai.usage.input_tokens  = inputTokens + cacheReadTokens + cacheWriteTokens
 gen_ai.usage.output_tokens = outputTokens          （已含 reasoning tokens）
 ```
 
-只导出 `inputTokens` 会低估每一个命中缓存的请求，常常差一个数量级。明细仍可查：`dsh.usage.uncached_input_tokens`、`dsh.usage.cache_read_tokens`、`dsh.usage.cache_write_tokens`、`dsh.usage.reasoning_tokens`。
+明细仍可查：`dsh.usage.uncached_input_tokens`、`dsh.usage.cache_read_tokens`、`dsh.usage.cache_write_tokens`、`dsh.usage.reasoning_tokens`。
 
 ## Metrics
 
@@ -122,8 +116,6 @@ gen_ai.usage.output_tokens = outputTokens          （已含 reasoning tokens）
 | `dsh.token.detail` | Histogram | `dsh.token.detail_kind`（`cache_read`/`cache_write`/`reasoning`） |
 | `dsh.tool.invocations` | Counter | `gen_ai.tool.name`、`dsh.tool.outcome` |
 | `dsh.turns` / `dsh.steps` | Counter | |
-
-缓存和推理明细不放进标准 token histogram，这样直接 `SUM()` 不会重复计数。
 
 ## Logs
 
@@ -136,9 +128,7 @@ WHERE session_id = '...' AND event_type = 'tool/result'
 ORDER BY timestamp;
 ```
 
-属性用下划线命名，是因为 GreptimeDB 把未提取的属性放在 JSON 列里，用 `json_get_string()` 读，而它会把 `session.id` 这种带点的键当成嵌套路径，取不出来。
-
-`assistant/chunk` 永不导出：一个 session 几万条 token 增量，承载的事实汇总后的 `assistant/message` 里都有。
+`assistant/chunk` 永不导出，同样的内容在汇总后的 `assistant/message` 里。
 
 ## 导出内容
 
@@ -150,9 +140,9 @@ ORDER BY timestamp;
 | `full` | 增加用户与助手的消息正文、工具参数、工具结果。 |
 | `full+prompt` | 增加 `request/header`：完整 system prompt 和全部工具 schema。 |
 
-有三样东西在任何模式下都不离开进程：工具私有的 `meta` 载荷、失败 turn 的内部 `error.message`，以及请求失败时的异常消息和堆栈。它们都是可能回显 prompt 的 provider 或工具文本。
+有三样东西在任何模式下都不离开进程：工具私有的 `meta` 载荷、失败 turn 的内部 `error.message`，以及请求失败时的异常消息和堆栈。
 
-投影层是正向白名单，插件不认识的事件类型——包括未来某个 DSH 插件声明的——只导出身份标识。DSH 自带的 `session-telemetry-otel` 默认方向相反：`FULL` 模式发送完整 `event.data`，含 system prompt，且自身不带任何脱敏规则。
+投影层是正向白名单，插件不认识的事件类型——包括未来某个 DSH 插件声明的——只导出身份标识。
 
 ## Dashboard
 
@@ -194,15 +184,13 @@ pnpm smoke    # 针对新打包 tarball 的打包检查
 GREPTIMEDB_OTLP_ENDPOINT=http://localhost:4000/v1/otlp pnpm test   # 追加真实数据库往返
 ```
 
-分四层，因为每层抓的是下面几层抓不到的：单测覆盖 span 状态机和投影白名单，profile 组装抓 bundle patch 解析不了或组装不出 entry，Loader 启动抓裸包名解析和真实 OTLP 字节，真实 GreptimeDB 抓 trace pipeline 接受与 SQL 可见的数值。
-
 ## 已知限制
 
-- **DSH 处于 pre-release**，官方声明首个正式版本前会自由重命名和重组包结构。本插件只读 session 事件流和已文档化的 payload 字段，peer 版本就是 CI 实际跑的那个版本（`0.1.1-rc.2`），而不是一个本项目无法担保的开放上界。DSH 出新版需要在这里测试并显式放行。
-- **GenAI 语义规范仍是 experimental。** 名字取自 `@opentelemetry/semantic-conventions/incubating`，会随它变动。span 同时带 `gen_ai.provider.name` 和已废弃的 `gen_ai.system`，因为现存 dashboard 都按旧名过滤。
-- **不做逐 turn flush。** 导出遵循 batch processor 自身节奏。逐 turn 强制 flush 会成为这条管线唯一的并发 flush 来源，与关闭时的 drain 交互会丢失尾部记录。
-- **关闭有时限，但时限无法取消传输。** `shutdownTimeoutMillis` 到期时仍在途的记录可能在退出时丢失。另一种选择是无限等待，那会把 CLI 挂死。
-- **Subagent session 有独立 trace。** 每个 session 的 span 自成一棵树，不拼接进父 session。
+- **DSH 处于 pre-release**，首个正式版本前会自由重命名和重组包结构。peer 版本就是 CI 实际跑的那个版本（`0.1.1-rc.2`），DSH 出新版需要在这里测试后再放行。
+- **GenAI 语义规范仍是 experimental。** 名字取自 `@opentelemetry/semantic-conventions/incubating`，会随它变动。span 同时带 `gen_ai.provider.name` 和已废弃的 `gen_ai.system`。
+- **不做逐 turn flush。** 导出遵循 batch processor 自身节奏。
+- **关闭有时限。** `shutdownTimeoutMillis` 到期时仍在途的记录可能在退出时丢失。
+- **Subagent session 有独立 trace**，不拼接进父 session。
 
 ## License
 
