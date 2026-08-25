@@ -168,7 +168,7 @@ Four Grafana dashboards ship in [`grafana/`](grafana/), along with a compose sta
 cd grafana && docker compose up -d && open http://localhost:3000
 ```
 
-![Trace explorer](grafana/screenshots/trace-explorer.png)
+![Trace explorer](https://raw.githubusercontent.com/tma1-ai/dsh-otel/main/grafana/screenshots/trace-explorer.png)
 
 | Dashboard | Answers |
 |---|---|
@@ -210,7 +210,7 @@ Four tiers, each catching what the ones below cannot:
 
 **DSH is pre-release.** It reserves the right to rename and repackage freely before its first tagged release. This plugin reads only the session event stream and documented payload fields, and pins its peer range to the version it is tested against (`0.1.1-rc.2`).
 
-**The GenAI conventions are experimental.** Attribute names come from `@opentelemetry/semantic-conventions/incubating` and move with it. `gen_ai.system` is not emitted; it is deprecated in favour of `gen_ai.provider.name`.
+**The GenAI conventions are experimental.** Attribute names come from `@opentelemetry/semantic-conventions/incubating` and move with it. Spans carry both `gen_ai.provider.name` and the deprecated `gen_ai.system` with the same value: existing GenAI dashboards select on the old name, and a span without it is invisible to them.
 
 **No per-turn flush.** Export follows the batch processors' own cadence. A forced flush per turn would be this pipeline's only source of concurrent flushes, and their interaction with the shutdown drain drops tail records.
 

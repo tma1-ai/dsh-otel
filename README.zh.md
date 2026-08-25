@@ -168,7 +168,7 @@ ORDER BY timestamp;
 cd grafana && docker compose up -d && open http://localhost:3000
 ```
 
-![Trace explorer](grafana/screenshots/trace-explorer.png)
+![Trace explorer](https://raw.githubusercontent.com/tma1-ai/dsh-otel/main/grafana/screenshots/trace-explorer.png)
 
 | Dashboard | 回答什么问题 |
 |---|---|
@@ -210,7 +210,7 @@ GREPTIMEDB_OTLP_ENDPOINT=http://localhost:4000/v1/otlp pnpm test   # 追加真�
 
 **DSH 处于 pre-release。** 官方声明首个正式版本之前会自由重命名和重组包结构。本插件只读 session 事件流和已文档化的 payload 字段，peer 版本锁定在实际测试过的版本（`0.1.1-rc.2`）。
 
-**GenAI 语义规范仍是 experimental。** 属性名取自 `@opentelemetry/semantic-conventions/incubating`，会随它变动。`gen_ai.system` 不发送，它已被 `gen_ai.provider.name` 取代。
+**GenAI 语义规范仍是 experimental。** 属性名取自 `@opentelemetry/semantic-conventions/incubating`，会随它变动。span 上同时带 `gen_ai.provider.name` 和已废弃的 `gen_ai.system`，值相同：现存的 GenAI dashboard 都按旧名过滤，不带它的 span 在那些面板里根本不出现。
 
 **不做逐 turn flush。** 导出遵循 batch processor 自身的节奏。逐 turn 强制 flush 会成为这条管线唯一的并发 flush 来源，它与关闭时的 drain 交互会丢失尾部记录。
 
