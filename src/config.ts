@@ -25,6 +25,7 @@ export const DEFAULT_SCHEDULED_DELAY_MILLIS = 5_000
 export const DEFAULT_EXPORT_TIMEOUT_MILLIS = 30_000
 export const DEFAULT_DATABASE = 'public'
 export const DEFAULT_SERVICE_NAME = 'dsh'
+export const DEFAULT_TTL = '180d'
 
 /** Node clamps larger timer delays to one millisecond; a runtime limit, not a tunable. */
 const MAX_TIMER_DELAY_MILLIS = 2_147_483_647
@@ -51,6 +52,12 @@ export interface Config {
   logTable?: string
   /** Table for traces; sent as `X-Greptime-Trace-Table-Name`. GreptimeDB defaults to `opentelemetry_traces`. */
   traceTable?: string
+  /**
+   * Retention for the tables this plugin creates: a duration such as `180d`, or
+   * `forever`. Set it to the empty string to send no hint at all, leaving the
+   * tables on the database's own default.
+   */
+  ttl?: string
   /** Covers the entire shutdown sequence, not one provider. */
   shutdownTimeoutMillis?: number
   metricIntervalMillis?: number
@@ -78,6 +85,7 @@ export const Config: z<Config> = z.object({
   serviceName: z.string(),
   logTable: z.string(),
   traceTable: z.string(),
+  ttl: z.string(),
   shutdownTimeoutMillis: z.number(),
   metricIntervalMillis: z.number(),
   maxExportBatchSize: z.number(),
@@ -96,6 +104,8 @@ export interface ResolvedConfig {
   readonly serviceName: string
   readonly logTable: string | undefined
   readonly traceTable: string | undefined
+  /** `undefined` sends no retention hint. */
+  readonly ttl: string | undefined
   readonly shutdownTimeoutMillis: number
   readonly metricIntervalMillis: number
   readonly maxExportBatchSize: number
@@ -109,7 +119,8 @@ export interface ResolvedConfig {
  * @param config - the raw plugin configuration.
  * @returns the resolved configuration every other module consumes.
  * @throws if the endpoint is not an `http(s)` URL, a duration is not a positive
- *   finite integer within Node's timer range, or `signals` is empty.
+ *   finite integer within Node's timer range, `signals` is empty, or `ttl` is
+ *   not a bare GreptimeDB retention value.
  */
 export function resolveConfig(config: Config): ResolvedConfig {
   const endpoint = parseEndpoint(config.endpoint)
@@ -142,6 +153,7 @@ export function resolveConfig(config: Config): ResolvedConfig {
     serviceName: nonEmpty(config.serviceName) ?? DEFAULT_SERVICE_NAME,
     logTable: nonEmpty(config.logTable),
     traceTable: nonEmpty(config.traceTable),
+    ttl: resolveTtl(config.ttl),
     shutdownTimeoutMillis: duration(config.shutdownTimeoutMillis, DEFAULT_SHUTDOWN_TIMEOUT_MILLIS, 'shutdownTimeoutMillis'),
     metricIntervalMillis,
     maxExportBatchSize: count(config.maxExportBatchSize, DEFAULT_MAX_EXPORT_BATCH_SIZE, 'maxExportBatchSize'),
@@ -189,6 +201,17 @@ function parseEndpoint(raw: string): URL {
 
 function nonEmpty(value: string | undefined): string | undefined {
   return value === undefined || value === '' ? undefined : value
+}
+
+function resolveTtl(value: string | undefined): string | undefined {
+  if (value === undefined) return DEFAULT_TTL
+  if (value === '') return undefined
+  // The value is spliced into `x-greptime-hints`, whose pairs are comma
+  // separated: anything outside this set could append a second hint.
+  if (!/^[A-Za-z0-9 ]+$/.test(value)) {
+    throw new Error(`@tma1-ai/dsh-plugin-greptimedb: ttl must be a duration such as 180d, or forever, got ${JSON.stringify(value)}`)
+  }
+  return value
 }
 
 function duration(value: number | undefined, fallback: number, field: string): number {

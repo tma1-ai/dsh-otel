@@ -67,6 +67,7 @@ docker run -p 127.0.0.1:4000-4003:4000-4003 \
 | `content` | `none` | 允许多少 payload 离开进程，见 [导出内容](#导出内容)。 |
 | `serviceName` | `dsh` | OTel `service.name`。 |
 | `logTable` / `traceTable` | GreptimeDB 默认 | 覆盖目标表名。 |
+| `ttl` | `180d` | 本插件建表时的保留期，通过 `x-greptime-hints` 发送，也接受 `forever`。GreptimeDB 只在自动建表时应用，已存在的表保持原设置，除非 `ALTER TABLE`。留空则不发这个 hint，沿用数据库默认值。 |
 | `shutdownTimeoutMillis` | `3000` | 整个退出流程的截止时间。 |
 | `metricIntervalMillis` | `30000` | metric 采集周期，不得小于 `exportTimeoutMillis`。 |
 | `maxExportBatchSize` / `maxQueueSize` | `512` / `2048` | 批量与缓冲上限。 |

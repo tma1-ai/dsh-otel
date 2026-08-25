@@ -43,6 +43,9 @@ export function exporterOptions(
 export function headersFor(config: ResolvedConfig, signal: Signal): Record<string, string> {
   const headers: Record<string, string> = { 'X-Greptime-DB-Name': config.database }
   if (config.authorization !== undefined) headers['Authorization'] = config.authorization
+  // A hint applies when GreptimeDB auto-creates the table; a table that already
+  // exists keeps its own retention until an ALTER TABLE changes it.
+  if (config.ttl !== undefined) headers['X-Greptime-Hints'] = `ttl=${config.ttl}`
   switch (signal) {
     case 'traces':
       headers['X-Greptime-Pipeline-Name'] = TRACE_PIPELINE_NAME

@@ -67,6 +67,7 @@ docker run -p 127.0.0.1:4000-4003:4000-4003 \
 | `content` | `none` | How much payload may leave the process. See [What leaves the machine](#what-leaves-the-machine). |
 | `serviceName` | `dsh` | OTel `service.name`. |
 | `logTable` / `traceTable` | GreptimeDB defaults | Destination table overrides. |
+| `ttl` | `180d` | Retention for the tables this plugin creates, sent as `x-greptime-hints`. Also accepts `forever`. GreptimeDB applies it when it auto-creates the table; an existing table keeps its own until `ALTER TABLE`. Set it empty to send no hint and inherit the database default. |
 | `shutdownTimeoutMillis` | `3000` | Deadline for the entire teardown sequence. |
 | `metricIntervalMillis` | `30000` | Metric collection period. Must be at least `exportTimeoutMillis`. |
 | `maxExportBatchSize` / `maxQueueSize` | `512` / `2048` | Batch and buffer bounds. |

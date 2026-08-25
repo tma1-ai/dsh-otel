@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { resolveConfig, signalUrl, DEFAULT_DATABASE } from '../src/config.js'
+import { resolveConfig, signalUrl, DEFAULT_DATABASE, DEFAULT_TTL } from '../src/config.js'
 import { EXTRACTED_LOG_KEYS, TRACE_PIPELINE_NAME, headersFor } from '../src/otlp.js'
 
 const BASE = 'http://localhost:4000/v1/otlp'
@@ -10,6 +10,7 @@ describe('resolveConfig', () => {
     expect(resolved.database).toBe(DEFAULT_DATABASE)
     expect(resolved.content).toBe('none')
     expect(resolved.authorization).toBeUndefined()
+    expect(resolved.ttl).toBe(DEFAULT_TTL)
     expect([...resolved.signals].sort()).toEqual(['logs', 'metrics', 'traces'])
   })
 
@@ -25,6 +26,8 @@ describe('resolveConfig', () => {
     // The metric reader rejects this pairing in its own constructor; catching
     // it here names both fields instead of surfacing an SDK message at mount.
     ['a metric interval below the export timeout', { endpoint: BASE, metricIntervalMillis: 1_000, exportTimeoutMillis: 5_000 }, /must be at least exportTimeoutMillis/],
+    // A comma would close the ttl pair and open another hint.
+    ['a ttl that carries a second hint', { endpoint: BASE, ttl: '180d,append_mode=false' }, /ttl must be a duration/],
   ])('rejects %s', (_label, config, message) => {
     // The cast models a cordis.yml author writing an invalid value; the schema
     // catches types, this step catches ranges and formats.
@@ -66,6 +69,15 @@ describe('headersFor', () => {
     const headers = headersFor(resolveConfig({ endpoint: BASE }), 'metrics')
     expect(headers['Authorization']).toBeUndefined()
     expect(headers['X-Greptime-DB-Name']).toBe(DEFAULT_DATABASE)
+  })
+
+  it('hints the retention of every signal it may auto-create', () => {
+    const resolved = resolveConfig({ endpoint: BASE })
+    for (const signal of ['traces', 'metrics', 'logs'] as const) {
+      expect(headersFor(resolved, signal)['X-Greptime-Hints']).toBe(`ttl=${DEFAULT_TTL}`)
+    }
+    const inherited = resolveConfig({ endpoint: BASE, ttl: '' })
+    expect(headersFor(inherited, 'traces')['X-Greptime-Hints']).toBeUndefined()
   })
 
   it('sends table overrides only when configured', () => {

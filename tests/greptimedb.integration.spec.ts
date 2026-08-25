@@ -183,6 +183,17 @@ describe.skipIf(ENDPOINT === undefined)('GreptimeDB round trip', () => {
     expect(cell(logs, 0, 'event_type')).toBe('turn/start')
   })
 
+  it('creates both tables with a retention, from the hint header alone', async () => {
+    for (const table of [TRACE_TABLE, LOG_TABLE]) {
+      const shown = await sql(`SHOW CREATE TABLE ${table}`)
+      // GreptimeDB stores the duration in its own humantime form, so `180d`
+      // comes back as `5months 27days 19h 12m`. The header value is pinned by
+      // the unit test; what a live database can prove is that a table created
+      // by an OTLP write inherits it at all.
+      expect(String(cell(shown, 0, 'Create Table'))).toMatch(/ttl = '[^']+'/)
+    }
+  })
+
   it('correlates every log record to the turn it belongs to', async () => {
     // Without span context on emit, `trace_id` is empty and the link is gone.
     const logs = await sql(
