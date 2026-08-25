@@ -56,6 +56,8 @@ docker run -p 127.0.0.1:4000-4003:4000-4003 \
   --mysql-addr 0.0.0.0:4002 --postgres-addr 0.0.0.0:4003
 ```
 
+这个实例自带的控制台在 <http://localhost:4000/dashboard/>，不起 Grafana 也能看表和跑临时 SQL。
+
 ## 配置
 
 | 键 | 默认值 | 说明 |

@@ -56,6 +56,8 @@ docker run -p 127.0.0.1:4000-4003:4000-4003 \
   --mysql-addr 0.0.0.0:4002 --postgres-addr 0.0.0.0:4003
 ```
 
+That instance serves GreptimeDB's own console at <http://localhost:4000/dashboard/> — enough to check the tables and run ad-hoc SQL before bringing up Grafana.
+
 ## Configuration
 
 | Key | Default | Notes |
