@@ -6,6 +6,7 @@
     "deepseek",
     "deepseek-harness",
     "dsh",
+    "dsh-plugin",
     "cordis",
     "opentelemetry",
     "otel",
