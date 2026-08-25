@@ -51,7 +51,7 @@ The defaults already point at a local GreptimeDB:
 ```sh
 docker run -p 127.0.0.1:4000-4003:4000-4003 \
   -v "$(pwd)/greptimedb_data:/greptimedb_data" \
-  --name greptime --rm greptime/greptimedb:v1.0.0 standalone start \
+  --name greptime --rm greptime/greptimedb:v1.2.0-beta.2 standalone start \
   --http-addr 0.0.0.0:4000 --rpc-bind-addr 0.0.0.0:4001 \
   --mysql-addr 0.0.0.0:4002 --postgres-addr 0.0.0.0:4003
 ```
@@ -67,7 +67,7 @@ docker run -p 127.0.0.1:4000-4003:4000-4003 \
 | `content` | `none` | How much payload may leave the process. See [What leaves the machine](#what-leaves-the-machine). |
 | `serviceName` | `dsh` | OTel `service.name`. |
 | `logTable` / `traceTable` | GreptimeDB defaults | Destination table overrides. |
-| `ttl` | `180d` | Retention for the tables this plugin creates, sent as `x-greptime-hints`. Also accepts `forever`. GreptimeDB applies it when it auto-creates the table; an existing table keeps its own until `ALTER TABLE`. Set it empty to send no hint and inherit the database default. |
+| `ttl` | `180d` | Retention for the log and trace tables this plugin creates, sent as `x-greptime-hints`. Also accepts `forever`. GreptimeDB applies it when it auto-creates the table; an existing table keeps its own until `ALTER TABLE`. Metric tables are not covered — see [Known limitations](#known-limitations). Set it empty to send no hint and inherit the database default. |
 | `shutdownTimeoutMillis` | `3000` | Deadline for the entire teardown sequence. |
 | `metricIntervalMillis` | `30000` | Metric collection period. Must be at least `exportTimeoutMillis`. |
 | `maxExportBatchSize` / `maxQueueSize` | `512` / `2048` | Batch and buffer bounds. |
@@ -189,6 +189,7 @@ GREPTIMEDB_OTLP_ENDPOINT=http://localhost:4000/v1/otlp pnpm test   # adds the li
 
 - **DSH is pre-release** and renames and repackages freely before its first tagged release. The peer range is the exact version CI runs against (`0.1.1-rc.2`); a new DSH release needs a tested bump here.
 - **The GenAI conventions are experimental.** Names come from `@opentelemetry/semantic-conventions/incubating` and move with it. Spans carry both `gen_ai.provider.name` and the deprecated `gen_ai.system`.
+- **`ttl` does not reach metric tables.** Metrics land on the metric engine, where retention is a property of the physical table. The hint reaches the logical table, which stores and displays it but never enforces it ([greptimedb#8951](https://github.com/GreptimeTeam/greptimedb/issues/8951)). Set it yourself with `ALTER TABLE greptime_physical_table SET 'ttl' = '180d'`.
 - **No per-turn flush.** Export follows the batch processors' cadence.
 - **Shutdown is bounded.** Records in flight when `shutdownTimeoutMillis` expires may be lost at exit.
 - **Subagent sessions get their own trace**, not stitched into the parent's.

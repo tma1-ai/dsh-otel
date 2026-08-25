@@ -51,7 +51,7 @@ profile patch 是整体替换目标行的 `config`，不是深合并，所以要
 ```sh
 docker run -p 127.0.0.1:4000-4003:4000-4003 \
   -v "$(pwd)/greptimedb_data:/greptimedb_data" \
-  --name greptime --rm greptime/greptimedb:v1.0.0 standalone start \
+  --name greptime --rm greptime/greptimedb:v1.2.0-beta.2 standalone start \
   --http-addr 0.0.0.0:4000 --rpc-bind-addr 0.0.0.0:4001 \
   --mysql-addr 0.0.0.0:4002 --postgres-addr 0.0.0.0:4003
 ```
@@ -67,7 +67,7 @@ docker run -p 127.0.0.1:4000-4003:4000-4003 \
 | `content` | `none` | 允许多少 payload 离开进程，见 [导出内容](#导出内容)。 |
 | `serviceName` | `dsh` | OTel `service.name`。 |
 | `logTable` / `traceTable` | GreptimeDB 默认 | 覆盖目标表名。 |
-| `ttl` | `180d` | 本插件建表时的保留期，通过 `x-greptime-hints` 发送，也接受 `forever`。GreptimeDB 只在自动建表时应用，已存在的表保持原设置，除非 `ALTER TABLE`。留空则不发这个 hint，沿用数据库默认值。 |
+| `ttl` | `180d` | 本插件建 log 和 trace 表时的保留期，通过 `x-greptime-hints` 发送，也接受 `forever`。GreptimeDB 只在自动建表时应用，已存在的表保持原设置，除非 `ALTER TABLE`。metric 表不在覆盖范围内，见[已知限制](#已知限制)。留空则不发这个 hint，沿用数据库默认值。 |
 | `shutdownTimeoutMillis` | `3000` | 整个退出流程的截止时间。 |
 | `metricIntervalMillis` | `30000` | metric 采集周期，不得小于 `exportTimeoutMillis`。 |
 | `maxExportBatchSize` / `maxQueueSize` | `512` / `2048` | 批量与缓冲上限。 |
@@ -189,6 +189,7 @@ GREPTIMEDB_OTLP_ENDPOINT=http://localhost:4000/v1/otlp pnpm test   # 追加真�
 
 - **DSH 处于 pre-release**，首个正式版本前会自由重命名和重组包结构。peer 版本就是 CI 实际跑的那个版本（`0.1.1-rc.2`），DSH 出新版需要在这里测试后再放行。
 - **GenAI 语义规范仍是 experimental。** 名字取自 `@opentelemetry/semantic-conventions/incubating`，会随它变动。span 同时带 `gen_ai.provider.name` 和已废弃的 `gen_ai.system`。
+- **`ttl` 覆盖不到 metric 表。** metric 走 metric engine，保留期是 physical table 的属性。hint 只到得了逻辑表，逻辑表会存下并显示它，但不会执行（[greptimedb#8951](https://github.com/GreptimeTeam/greptimedb/issues/8951)）。请自行 `ALTER TABLE greptime_physical_table SET 'ttl' = '180d'`。
 - **不做逐 turn flush。** 导出遵循 batch processor 自身节奏。
 - **关闭有时限。** `shutdownTimeoutMillis` 到期时仍在途的记录可能在退出时丢失。
 - **Subagent session 有独立 trace**，不拼接进父 session。
