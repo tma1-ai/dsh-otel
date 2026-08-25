@@ -1,0 +1,219 @@
+{
+  "uid": "dsh-agent",
+  "title": "DSH · Agent loop",
+  "description": "What the agent actually did: tool calls, loop depth, and how turns ended. These views need the turn and tool spans that dsh-plugin-greptimedb adds; a plain LLM instrumentation cannot produce them.",
+  "tags": ["dsh", "greptimedb", "genai"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    { "type": "row", "title": "Loop", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }, "collapsed": false, "panels": [] },
+    {
+      "type": "stat",
+      "title": "Steps per turn",
+      "description": "How many model calls it took to finish a request, on average.",
+      "datasource": { "type": "mysql", "uid": "greptimedb" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 1 },
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 2, "color": { "mode": "fixed", "fixedColor": "text" } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "value", "graphMode": "none" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "datasource": { "type": "mysql", "uid": "greptimedb" },
+          "rawSql": "SELECT ROUND(CAST(SUM(CASE WHEN span_name LIKE 'chat%' THEN 1 ELSE 0 END) AS DOUBLE) / NULLIF(SUM(CASE WHEN span_name = 'invoke_agent dsh' THEN 1 ELSE 0 END), 0), 2) AS steps_per_turn FROM opentelemetry_traces WHERE $__timeFilter(timestamp)"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Tool calls",
+      "datasource": { "type": "mysql", "uid": "greptimedb" },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 },
+      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "fixed", "fixedColor": "text" } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "value", "graphMode": "none" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "datasource": { "type": "mysql", "uid": "greptimedb" },
+          "rawSql": "SELECT COUNT(*) AS tool_calls FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND `span_attributes.gen_ai.tool.name` IS NOT NULL"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Tool failure rate",
+      "description": "Taken from the result block's isError, which is the authoritative outcome.",
+      "datasource": { "type": "mysql", "uid": "greptimedb" },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 1 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 10 }, { "color": "red", "value": 25 }] },
+          "color": { "mode": "thresholds" }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "value", "graphMode": "none" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "datasource": { "type": "mysql", "uid": "greptimedb" },
+          "rawSql": "SELECT ROUND(100.0 * SUM(CASE WHEN `span_attributes.dsh.tool.outcome` = 'error' THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0), 2) AS failure_rate FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND `span_attributes.gen_ai.tool.name` IS NOT NULL"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Spans without an end event",
+      "description": "Crashes, kills, and tools that never reported back. Their durations are lower bounds.",
+      "datasource": { "type": "mysql", "uid": "greptimedb" },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 1 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 1 }] },
+          "color": { "mode": "thresholds" }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "value", "graphMode": "none" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "datasource": { "type": "mysql", "uid": "greptimedb" },
+          "rawSql": "SELECT COUNT(*) AS unclosed FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND `span_attributes.dsh.span.unclosed` IS NOT NULL"
+        }
+      ]
+    },
+
+    { "type": "row", "title": "Tools", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 }, "collapsed": false, "panels": [] },
+    {
+      "type": "barchart",
+      "title": "Calls by tool",
+      "datasource": { "type": "mysql", "uid": "greptimedb" },
+      "gridPos": { "h": 8, "w": 10, "x": 0, "y": 6 },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "fillOpacity": 80, "lineWidth": 0 } }, "overrides": [{ "matcher": { "id": "byName", "options": "errors" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }] }] },
+      "options": { "xField": "tool", "stacking": "normal", "orientation": "horizontal", "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true } },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "datasource": { "type": "mysql", "uid": "greptimedb" },
+          "rawSql": "SELECT `span_attributes.gen_ai.tool.name` AS tool, SUM(CASE WHEN `span_attributes.dsh.tool.outcome` = 'error' THEN 0 ELSE 1 END) AS ok, SUM(CASE WHEN `span_attributes.dsh.tool.outcome` = 'error' THEN 1 ELSE 0 END) AS errors FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND `span_attributes.gen_ai.tool.name` IS NOT NULL GROUP BY tool ORDER BY ok + errors DESC"
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "title": "Tool latency",
+      "datasource": { "type": "mysql", "uid": "greptimedb" },
+      "gridPos": { "h": 8, "w": 14, "x": 10, "y": 6 },
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "auto" } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "p50_ms" }, "properties": [{ "id": "unit", "value": "ms" }] },
+          { "matcher": { "id": "byName", "options": "p95_ms" }, "properties": [{ "id": "unit", "value": "ms" }] },
+          { "matcher": { "id": "byName", "options": "max_ms" }, "properties": [{ "id": "unit", "value": "ms" }] },
+          { "matcher": { "id": "byName", "options": "total_s" }, "properties": [{ "id": "unit", "value": "s" }] }
+        ]
+      },
+      "options": { "showHeader": true, "footer": { "show": false }, "sortBy": [{ "displayName": "total_s", "desc": true }] },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "datasource": { "type": "mysql", "uid": "greptimedb" },
+          "rawSql": "SELECT `span_attributes.gen_ai.tool.name` AS tool, COUNT(*) AS calls, ROUND(approx_percentile_cont(duration_nano, 0.50) / 1000000, 1) AS p50_ms, ROUND(approx_percentile_cont(duration_nano, 0.95) / 1000000, 1) AS p95_ms, ROUND(MAX(duration_nano) / 1000000, 1) AS max_ms, ROUND(SUM(duration_nano) / 1000000000.0, 1) AS total_s FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND `span_attributes.gen_ai.tool.name` IS NOT NULL GROUP BY tool ORDER BY total_s DESC"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Tool errors over time",
+      "datasource": { "type": "mysql", "uid": "greptimedb" },
+      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 14 },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "fillOpacity": 30, "lineWidth": 1, "drawStyle": "bars", "stacking": { "mode": "normal", "group": "A" } } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawQuery": true,
+          "datasource": { "type": "mysql", "uid": "greptimedb" },
+          "rawSql": "SELECT date_trunc('minute', timestamp) AS time, `span_attributes.gen_ai.tool.name` AS tool, COUNT(*) AS errors FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND `span_attributes.dsh.tool.outcome` = 'error' GROUP BY time, tool ORDER BY time"
+        }
+      ]
+    },
+
+    { "type": "row", "title": "Turns", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 21 }, "collapsed": false, "panels": [] },
+    {
+      "type": "piechart",
+      "title": "How turns ended",
+      "datasource": { "type": "mysql", "uid": "greptimedb" },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 22 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": true }, "pieType": "donut", "legend": { "displayMode": "list", "placement": "right", "showLegend": true } },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "datasource": { "type": "mysql", "uid": "greptimedb" },
+          "rawSql": "SELECT `span_attributes.dsh.turn.end_reason` AS reason, COUNT(*) AS turns FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND `span_attributes.dsh.turn.end_reason` IS NOT NULL GROUP BY reason ORDER BY turns DESC"
+        }
+      ]
+    },
+    {
+      "type": "barchart",
+      "title": "Loop depth distribution",
+      "description": "Turns bucketed by how many model calls they needed.",
+      "datasource": { "type": "mysql", "uid": "greptimedb" },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 22 },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "fillOpacity": 80, "lineWidth": 0 } }, "overrides": [] },
+      "options": { "xField": "steps", "legend": { "showLegend": false }, "orientation": "auto" },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "datasource": { "type": "mysql", "uid": "greptimedb" },
+          "rawSql": "SELECT CAST(steps AS STRING) AS steps, COUNT(*) AS turns FROM (SELECT `span_attributes.dsh.session.id` AS sid, `span_attributes.dsh.turn` AS turn, COUNT(*) AS steps FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND span_name LIKE 'chat%' GROUP BY sid, turn) GROUP BY steps ORDER BY steps"
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "title": "Slowest turns",
+      "datasource": { "type": "mysql", "uid": "greptimedb" },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 22 },
+      "fieldConfig": {
+        "defaults": { "custom": { "align": "auto" } },
+        "overrides": [{ "matcher": { "id": "byName", "options": "seconds" }, "properties": [{ "id": "unit", "value": "s" }] }]
+      },
+      "options": { "showHeader": true, "footer": { "show": false } },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "datasource": { "type": "mysql", "uid": "greptimedb" },
+          "rawSql": "SELECT `span_attributes.dsh.session.id` AS session, `span_attributes.dsh.turn` AS turn, `span_attributes.dsh.turn.end_reason` AS reason, ROUND(duration_nano / 1000000000.0, 2) AS seconds, trace_id FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND span_name = 'invoke_agent dsh' ORDER BY duration_nano DESC LIMIT 20"
+        }
+      ]
+    }
+  ]
+}

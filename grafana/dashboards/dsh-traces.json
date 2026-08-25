@@ -1,0 +1,385 @@
+{
+  "uid": "dsh-traces",
+  "title": "DSH \u00b7 Trace explorer",
+  "description": "Find a turn, then read it span by span. The waterfall shows the agent loop as it actually ran: one turn span with its model calls and tool executions as siblings.",
+  "tags": [
+    "dsh",
+    "greptimedb",
+    "genai",
+    "traces"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "trace_id",
+        "label": "Trace ID",
+        "description": "Leave empty to show the most recent turn. Click a row in Recent turns to fill it.",
+        "type": "textbox",
+        "query": "",
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "options": []
+      },
+      {
+        "name": "session",
+        "label": "Session",
+        "type": "query",
+        "datasource": {
+          "type": "mysql",
+          "uid": "greptimedb"
+        },
+        "query": "SELECT DISTINCT `span_attributes.dsh.session.id` FROM opentelemetry_traces WHERE `span_attributes.dsh.session.id` IS NOT NULL ORDER BY 1 DESC LIMIT 200",
+        "refresh": 2,
+        "includeAll": true,
+        "multi": false,
+        "current": {
+          "text": "All",
+          "value": "%"
+        },
+        "allValue": "%"
+      },
+      {
+        "name": "outcome",
+        "label": "Turn outcome",
+        "type": "custom",
+        "query": "all, completed, error, aborted, max-tokens, interrupted",
+        "includeAll": false,
+        "multi": false,
+        "current": {
+          "text": "all",
+          "value": "all"
+        },
+        "options": []
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "row",
+      "title": "Find a turn",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "table",
+      "title": "Recent turns",
+      "description": "Click a trace_id to open it in the waterfall below.",
+      "datasource": {
+        "type": "mysql",
+        "uid": "greptimedb"
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 24,
+        "x": 0,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "seconds"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "trace_id"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open this turn in the waterfall",
+                    "url": "/d/dsh-traces/dsh-trace-explorer?var-trace_id=${__value.raw}&${__url_time_range}",
+                    "targetBlank": false
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "reason"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "error": {
+                        "color": "red",
+                        "index": 0
+                      },
+                      "completed": {
+                        "color": "green",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "footer": {
+          "show": false
+        },
+        "sortBy": [
+          {
+            "displayName": "started",
+            "desc": true
+          }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "datasource": {
+            "type": "mysql",
+            "uid": "greptimedb"
+          },
+          "rawSql": "SELECT timestamp AS started, `span_attributes.dsh.session.id` AS session, `span_attributes.dsh.turn` AS turn, `span_attributes.dsh.turn.end_reason` AS reason, ROUND(duration_nano / 1000000000.0, 2) AS seconds, trace_id FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND span_name = 'invoke_agent dsh' AND `span_attributes.dsh.session.id` LIKE '$session' AND ('$outcome' = 'all' OR `span_attributes.dsh.turn.end_reason` = '$outcome') ORDER BY timestamp DESC LIMIT 100"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Read the turn",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 12
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "traces",
+      "title": "Waterfall",
+      "description": "Empty trace ID falls back to the most recent turn in range.",
+      "datasource": {
+        "type": "info8fcc-greptimedb-datasource",
+        "uid": "greptimedb-traces"
+      },
+      "gridPos": {
+        "h": 16,
+        "w": 24,
+        "x": 0,
+        "y": 13
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {},
+      "targets": [
+        {
+          "refId": "Trace ID",
+          "datasource": {
+            "type": "info8fcc-greptimedb-datasource",
+            "uid": "greptimedb-traces"
+          },
+          "editorType": "builder",
+          "format": 3,
+          "queryType": "traces",
+          "builderOptions": {
+            "database": "public",
+            "table": "opentelemetry_traces",
+            "queryType": "traces",
+            "columns": [
+              {
+                "name": "trace_id",
+                "hint": "trace_id"
+              },
+              {
+                "name": "span_id",
+                "hint": "trace_span_id"
+              },
+              {
+                "name": "parent_span_id",
+                "hint": "trace_parent_span_id"
+              },
+              {
+                "name": "service_name",
+                "hint": "trace_service_name"
+              },
+              {
+                "name": "span_name",
+                "hint": "trace_operation_name"
+              },
+              {
+                "name": "timestamp",
+                "hint": "time"
+              },
+              {
+                "name": "duration_nano",
+                "hint": "trace_duration_time"
+              },
+              {
+                "name": "span_status_code",
+                "hint": "trace_status_code"
+              },
+              {
+                "name": "span_attributes.gen_ai.request.model",
+                "hint": "trace_tags"
+              },
+              {
+                "name": "span_attributes.gen_ai.tool.name",
+                "hint": "trace_tags"
+              },
+              {
+                "name": "span_attributes.dsh.step",
+                "hint": "trace_tags"
+              },
+              {
+                "name": "span_attributes.dsh.tool.outcome",
+                "hint": "trace_tags"
+              },
+              {
+                "name": "span_attributes.gen_ai.usage.input_tokens",
+                "hint": "trace_tags"
+              },
+              {
+                "name": "span_attributes.gen_ai.usage.output_tokens",
+                "hint": "trace_tags"
+              }
+            ],
+            "filters": [
+              {
+                "filterType": "custom",
+                "key": "",
+                "hint": "time",
+                "operator": "WITH IN DASHBOARD TIME RANGE",
+                "type": "datetime",
+                "condition": "AND"
+              }
+            ],
+            "orderBy": [],
+            "limit": 1000,
+            "meta": {
+              "traceDurationUnit": "nanoseconds",
+              "isTraceIdMode": true,
+              "otelEnabled": true,
+              "otelVersion": "latest"
+            }
+          },
+          "rawSql": "SELECT * FROM opentelemetry_traces WHERE timestamp >= $__fromTime AND timestamp <= $__toTime AND trace_id = COALESCE(NULLIF('${trace_id}', ''), (SELECT trace_id FROM opentelemetry_traces WHERE timestamp >= $__fromTime AND timestamp <= $__toTime AND span_name = 'invoke_agent dsh' ORDER BY \"timestamp\" DESC LIMIT 1)) ORDER BY \"timestamp\""
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Spans in this turn",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 29
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "table",
+      "title": "Span detail",
+      "description": "The same spans as the waterfall, with the attributes the waterfall truncates.",
+      "datasource": {
+        "type": "mysql",
+        "uid": "greptimedb"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 30
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "ms"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "footer": {
+          "show": false
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "datasource": {
+            "type": "mysql",
+            "uid": "greptimedb"
+          },
+          "rawSql": "SELECT timestamp AS started, span_name, `span_attributes.dsh.step` AS step, ROUND(duration_nano / 1000000.0, 1) AS ms, span_status_code AS status, `span_attributes.gen_ai.request.model` AS model, `span_attributes.gen_ai.tool.name` AS tool, `span_attributes.dsh.tool.outcome` AS tool_outcome, `span_attributes.gen_ai.usage.input_tokens` AS input_tokens, `span_attributes.gen_ai.usage.output_tokens` AS output_tokens, `span_attributes.error.type` AS error_type FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND trace_id = COALESCE(NULLIF('${trace_id}', ''), (SELECT trace_id FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND span_name = 'invoke_agent dsh' ORDER BY timestamp DESC LIMIT 1)) ORDER BY timestamp"
+        }
+      ]
+    }
+  ]
+}

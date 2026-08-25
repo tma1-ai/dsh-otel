@@ -160,6 +160,25 @@ ORDER BY timestamp;
 
 作为对比，DSH 自带的 `session-telemetry-otel` 默认方向相反：它的 `FULL` 模式发送完整 `event.data`，含 system prompt，且自身不带任何脱敏规则。
 
+## Dashboard
+
+[`grafana/`](grafana/) 下有四个 Grafana dashboard，外加一个把 GreptimeDB 和 Grafana 一起拉起来的 compose 栈。
+
+```sh
+cd grafana && docker compose up -d && open http://localhost:3000
+```
+
+![Trace explorer](grafana/screenshots/trace-explorer.png)
+
+| Dashboard | 回答什么问题 |
+|---|---|
+| Overview | 花了多少钱、多快、多少来自缓存 |
+| Agent loop | 哪些工具在跑、失败率多少、一个 turn 用了几次模型调用 |
+| Trace explorer | 某一个 turn 内部到底发生了什么，逐 span 看 |
+| Log explorer | 全部 session 事件，可按 session、类型和全文检索过滤 |
+
+每个 panel 的查询都由 `node grafana/verify.mjs` 对着真实数据库验证过。数据源的分工见 [grafana/README.md](grafana/README.md)，这些查询需要的索引见 [grafana/indexes.sql](grafana/indexes.sql)。
+
 ## 配合 TMA1
 
 [TMA1](https://github.com/tma1-ai/tma1) 会把 OTLP 反代进它自己管理的 GreptimeDB。把 `endpoint` 指过去，DSH 就出现在 OTel GenAI 视图里：

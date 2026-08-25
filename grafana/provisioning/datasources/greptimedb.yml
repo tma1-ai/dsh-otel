@@ -1,0 +1,41 @@
+apiVersion: 1
+
+# GreptimeDB speaks the MySQL wire protocol, so Grafana's built-in MySQL
+# datasource reads it with no plugin to install. Column names containing dots
+# (`span_attributes.gen_ai.request.model`) need backticks in every query.
+datasources:
+  - name: GreptimeDB
+    type: mysql
+    uid: greptimedb
+    url: greptimedb:4002
+    database: public
+    isDefault: true
+    editable: true
+    jsonData:
+      maxOpenConns: 10
+      maxIdleConns: 5
+      connMaxLifetime: 14400
+
+  # GreptimeDB's own datasource. Needed for the trace waterfall: it knows how to
+  # turn the trace table into Grafana's trace model, which a SQL datasource
+  # cannot do.
+  - name: GreptimeDB-Traces
+    type: info8fcc-greptimedb-datasource
+    uid: greptimedb-traces
+    isDefault: false
+    editable: true
+    jsonData:
+      host: http://greptimedb:4000
+      defaultDatabase: public
+      traces:
+        defaultDatabase: public
+        defaultTable: opentelemetry_traces
+        traceIdColumn: trace_id
+        spanIdColumn: span_id
+        parentSpanIdColumn: parent_span_id
+        serviceNameColumn: service_name
+        operationNameColumn: span_name
+        startTimeColumn: timestamp
+        durationColumn: duration_nano
+        durationUnit: nanoseconds
+        tagsColumnPrefix: 'span_attributes.'

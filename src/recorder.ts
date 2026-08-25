@@ -44,6 +44,7 @@ import {
   ATTR_GEN_AI_OPERATION_NAME,
   ATTR_GEN_AI_PROVIDER_NAME,
   ATTR_GEN_AI_REQUEST_MODEL,
+  ATTR_GEN_AI_SYSTEM,
   ATTR_GEN_AI_TOKEN_TYPE,
   ATTR_GEN_AI_TOOL_CALL_ID,
   ATTR_GEN_AI_TOOL_NAME,
@@ -251,7 +252,7 @@ export class SessionRecorder {
     for (const open of this.chatSpans.values()) {
       open.span.updateName(`${GEN_AI_OPERATION_NAME_VALUE_CHAT} ${model}`)
       open.span.setAttribute(ATTR_GEN_AI_REQUEST_MODEL, model)
-      open.span.setAttribute(ATTR_GEN_AI_PROVIDER_NAME, provider)
+      open.span.setAttributes(this.routeAttributes())
     }
   }
 
@@ -322,8 +323,25 @@ export class SessionRecorder {
       [ATTR_DSH_SESSION_ID]: this.sessionId,
       [ATTR_DSH_TURN]: turn,
       [ATTR_DSH_STEP]: step,
+      ...this.routeAttributes(),
+    }
+  }
+
+  /**
+   * The provider and model attributes for the current route.
+   *
+   * `gen_ai.system` carries the same value as `gen_ai.provider.name`. It is
+   * deprecated, but existing GenAI dashboards and collectors select on it, and
+   * a span that omits it is invisible to them.
+   * @returns the route attributes, empty until `request/context` reveals them.
+   */
+  private routeAttributes(): Attributes {
+    return {
       ...this.model === undefined ? {} : { [ATTR_GEN_AI_REQUEST_MODEL]: this.model },
-      ...this.provider === undefined ? {} : { [ATTR_GEN_AI_PROVIDER_NAME]: this.provider },
+      ...this.provider === undefined ? {} : {
+        [ATTR_GEN_AI_PROVIDER_NAME]: this.provider,
+        [ATTR_GEN_AI_SYSTEM]: this.provider,
+      },
     }
   }
 
@@ -332,10 +350,7 @@ export class SessionRecorder {
   }
 
   private recordUsage(usage: TokenUsage): void {
-    const dimensions = {
-      ...this.model === undefined ? {} : { [ATTR_GEN_AI_REQUEST_MODEL]: this.model },
-      ...this.provider === undefined ? {} : { [ATTR_GEN_AI_PROVIDER_NAME]: this.provider },
-    }
+    const dimensions = this.routeAttributes()
     this.instruments.tokenUsage.record(billedInputTokens(usage), {
       ...dimensions,
       [ATTR_GEN_AI_TOKEN_TYPE]: GEN_AI_TOKEN_TYPE_VALUE_INPUT,

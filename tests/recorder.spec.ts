@@ -12,7 +12,9 @@ import {
   ATTR_DSH_TOOL_OUTCOME,
   ATTR_DSH_USAGE_CACHE_READ_TOKENS,
   ATTR_DSH_RESPONSE_INTERRUPTED,
+  ATTR_GEN_AI_PROVIDER_NAME,
   ATTR_GEN_AI_REQUEST_MODEL,
+  ATTR_GEN_AI_SYSTEM,
   ATTR_GEN_AI_USAGE_INPUT_TOKENS,
   ATTR_GEN_AI_USAGE_OUTPUT_TOKENS,
 } from '../src/semconv.js'
@@ -96,6 +98,20 @@ describe('SessionRecorder span tree', () => {
     const chat = byName(spans.getFinishedSpans(), 'chat')
     expect(chat.name).toBe('chat deepseek-reasoner')
     expect(chat.attributes[ATTR_GEN_AI_REQUEST_MODEL]).toBe('deepseek-reasoner')
+  })
+
+  it('emits the deprecated gen_ai.system alongside gen_ai.provider.name', () => {
+    // Existing GenAI dashboards select on `gen_ai.system`; a span without it
+    // does not appear in them at all.
+    const { recorder, spans } = setup()
+    recorder.handle(event('turn/start', { turn: 1 }, T0))
+    recorder.handle(event('step/start', { turn: 1, step: 1 }, T0 + 10))
+    recorder.handle(event('request/context', { provider: 'deepseek', model: 'deepseek-chat' }, T0 + 11))
+    recorder.handle(assistantMessage({ turn: 1, step: 1, time: T0 + 100 }))
+
+    const chat = byName(spans.getFinishedSpans(), 'chat')
+    expect(chat.attributes[ATTR_GEN_AI_PROVIDER_NAME]).toBe('deepseek')
+    expect(chat.attributes[ATTR_GEN_AI_SYSTEM]).toBe('deepseek')
   })
 
   it('keeps the placeholder model when no request/context arrives', () => {

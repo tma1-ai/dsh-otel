@@ -1,0 +1,53 @@
+# GreptimeDB + Grafana with the DSH dashboards provisioned.
+#
+#   docker compose up -d
+#   open http://localhost:3000        (anonymous admin, no login)
+#
+# Point the plugin at http://localhost:4000/v1/otlp and the dashboards fill in.
+
+services:
+  greptimedb:
+    image: greptime/greptimedb:v1.0.0
+    command:
+      - standalone
+      - start
+      - --http-addr=0.0.0.0:4000
+      - --rpc-bind-addr=0.0.0.0:4001
+      - --mysql-addr=0.0.0.0:4002
+      - --postgres-addr=0.0.0.0:4003
+    ports:
+      - '4000:4000'
+      - '4001:4001'
+      - '4002:4002'
+      - '4003:4003'
+    volumes:
+      - greptimedb-data:/greptimedb_data
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:4000/health']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  grafana:
+    image: grafana/grafana:11.6.0
+    ports:
+      - '3000:3000'
+    environment:
+      # A local demo stack; drop these two to restore the login screen.
+      GF_AUTH_ANONYMOUS_ENABLED: 'true'
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_USERS_DEFAULT_THEME: dark
+      # The trace explorer needs GreptimeDB's own datasource: Grafana's MySQL
+      # datasource returns rows, but only this one renders a trace waterfall.
+      GF_INSTALL_PLUGINS: >-
+        https://github.com/GreptimeTeam/greptimedb-grafana-datasource/releases/download/v3.0.3/info8fcc-greptimedb-datasource.zip;info8fcc-greptimedb-datasource
+      GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS: info8fcc-greptimedb-datasource
+    volumes:
+      - ./provisioning:/etc/grafana/provisioning:ro
+      - ./dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      greptimedb:
+        condition: service_healthy
+
+volumes:
+  greptimedb-data:

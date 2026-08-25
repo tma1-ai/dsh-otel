@@ -17,9 +17,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The version comes from package.json `packageManager`; setting it here
+      # too makes the action fail on the duplicate declaration.
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       - uses: actions/setup-node@v4
         with:

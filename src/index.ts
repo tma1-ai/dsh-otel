@@ -44,8 +44,12 @@ export const inject = ['sessions']
  */
 export function apply(ctx: Context, config: Config): void {
   const resolved = resolveConfig(config)
-  const pipeline = createPipeline(resolved, version, (error: unknown) => {
-    ctx.logger.warn('greptimedb-otel: telemetry shutdown failed: %o', error)
+  const pipeline = createPipeline(resolved, version, (stage, error) => {
+    // A rejected export means the data is simply absent. GreptimeDB puts the
+    // reason (schema mismatch, unknown table, auth) in the error's `data`, so
+    // it is logged alongside the message rather than left to inspection depth.
+    const detail = error instanceof Error && 'data' in error ? ` ${String(error.data)}` : ''
+    ctx.logger.warn('greptimedb-otel: telemetry %s failed: %s%s', stage, String(error), detail)
   })
   const recorders = new WeakMap<Session, SessionRecorder>()
 

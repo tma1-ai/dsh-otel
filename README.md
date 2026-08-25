@@ -160,6 +160,25 @@ The projection is a positive allowlist. An event type the plugin does not know, 
 
 For contrast, DSH's own `session-telemetry-otel` defaults the other way: its `FULL` mode ships the complete `event.data`, system prompt included, with no redaction rules of its own.
 
+## Dashboards
+
+Four Grafana dashboards ship in [`grafana/`](grafana/), along with a compose stack that brings up GreptimeDB and Grafana together.
+
+```sh
+cd grafana && docker compose up -d && open http://localhost:3000
+```
+
+![Trace explorer](grafana/screenshots/trace-explorer.png)
+
+| Dashboard | Answers |
+|---|---|
+| Overview | What did this cost, how fast was it, how much came from cache |
+| Agent loop | Which tools ran, how often they failed, how many model calls a turn needed |
+| Trace explorer | What happened inside one specific turn, span by span |
+| Log explorer | Every session event, filterable by session, type, and full-text search |
+
+Every panel query is checked against a live database by `node grafana/verify.mjs`. See [grafana/README.md](grafana/README.md) for the datasource split and [grafana/indexes.sql](grafana/indexes.sql) for the indexes these queries want.
+
 ## With TMA1
 
 [TMA1](https://github.com/tma1-ai/tma1) proxies OTLP into a GreptimeDB it manages. Point `endpoint` at it and DSH shows up in the OTel GenAI view:

@@ -15,6 +15,13 @@ export {
   ATTR_GEN_AI_CONVERSATION_ID,
   ATTR_GEN_AI_OPERATION_NAME,
   ATTR_GEN_AI_PROVIDER_NAME,
+  /**
+   * Deprecated in favour of `gen_ai.provider.name`, and emitted anyway with the
+   * same value: existing GenAI dashboards and collectors filter on it, and a
+   * span carrying only the new name is invisible to them. Deprecated is not
+   * removed, and one extra attribute is cheaper than an ecosystem mismatch.
+   */
+  ATTR_GEN_AI_SYSTEM,
   ATTR_GEN_AI_REQUEST_MODEL,
   ATTR_GEN_AI_TOKEN_TYPE,
   ATTR_GEN_AI_TOOL_CALL_ID,

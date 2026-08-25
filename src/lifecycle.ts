@@ -11,6 +11,7 @@
  * @module lifecycle
  */
 
+import { ExportResultCode, type ExportResult } from '@opentelemetry/core'
 import { NodeTracerProvider, BatchSpanProcessor } from '@opentelemetry/sdk-trace-node'
 import { MeterProvider, PeriodicExportingMetricReader } from '@opentelemetry/sdk-metrics'
 import { LoggerProvider, BatchLogRecordProcessor } from '@opentelemetry/sdk-logs'
@@ -28,6 +29,43 @@ import { createInstruments, type Instruments } from './metrics.js'
 
 /** Instrumentation scope reported for every span, metric, and log record. */
 export const SCOPE_NAME = 'dsh-plugin-greptimedb'
+
+/** Where a reported failure came from, so the log line can say which. */
+export type FailureStage = 'export' | 'shutdown'
+
+/** Receives every contained pipeline failure. */
+export type FailureSink = (stage: FailureStage, error: unknown) => void
+
+/**
+ * Wrap an exporter so failed exports are reported instead of vanishing.
+ *
+ * The batch processors swallow export failures: they hand the result back to
+ * the SDK's global `diag` and nothing else. A GreptimeDB rejection — a schema
+ * mismatch, a bad table name, expired credentials — therefore looks exactly
+ * like success from the outside, with the data silently absent. Wrapping the
+ * exporter is precise (one callback per export) and leaves the process-global
+ * `diag` alone for the host application to own.
+ *
+ * @param inner - the exporter to wrap.
+ * @param onError - receives the failure of each rejected export.
+ * @returns a proxy delegating everything except the export result inspection.
+ */
+function reportingExporter<T extends object>(inner: T, onError: FailureSink): T {
+  return new Proxy(inner, {
+    get(target, property, receiver) {
+      const value: unknown = Reflect.get(target, property, receiver)
+      if (property !== 'export' || typeof value !== 'function') return value
+      return (items: unknown, resultCallback: (result: ExportResult) => void): void => {
+        (value as (i: unknown, cb: (r: ExportResult) => void) => void).call(target, items, (result) => {
+          if (result.code === ExportResultCode.FAILED) {
+            onError('export', result.error ?? new Error('OTLP export failed without an error'))
+          }
+          resultCallback(result)
+        })
+      }
+    },
+  })
+}
 
 /**
  * The SDK pipeline for one plugin instance.
@@ -55,13 +93,13 @@ export interface Pipeline {
  * Build the SDK pipeline for the enabled signals.
  * @param config - the resolved plugin configuration.
  * @param version - the plugin version, reported as the instrumentation scope version.
- * @param onError - receives a contained shutdown failure.
+ * @param onError - receives every contained export and shutdown failure.
  * @returns the pipeline, whose absent members correspond to disabled signals.
  */
 export function createPipeline(
   config: ResolvedConfig,
   version: string,
-  onError: (error: unknown) => void,
+  onError: FailureSink,
 ): Pipeline {
   const resource = resourceFromAttributes({ [ATTR_SERVICE_NAME]: config.serviceName })
   const shutdowns: (() => Promise<void>)[] = []
@@ -71,7 +109,7 @@ export function createPipeline(
     const provider = new NodeTracerProvider({
       resource,
       spanProcessors: [
-        new BatchSpanProcessor(new OTLPTraceExporter(exporterOptions(config, 'traces')), {
+        new BatchSpanProcessor(reportingExporter(new OTLPTraceExporter(exporterOptions(config, 'traces')), onError), {
           maxExportBatchSize: config.maxExportBatchSize,
           maxQueueSize: config.maxQueueSize,
           scheduledDelayMillis: config.scheduledDelayMillis,
@@ -89,7 +127,7 @@ export function createPipeline(
       resource,
       readers: [
         new PeriodicExportingMetricReader({
-          exporter: new OTLPMetricExporter(exporterOptions(config, 'metrics')),
+          exporter: reportingExporter(new OTLPMetricExporter(exporterOptions(config, 'metrics')), onError),
           exportIntervalMillis: config.metricIntervalMillis,
           exportTimeoutMillis: config.exportTimeoutMillis,
         }),
@@ -105,7 +143,7 @@ export function createPipeline(
       resource,
       processors: [
         new BatchLogRecordProcessor({
-          exporter: new OTLPLogExporter(exporterOptions(config, 'logs')),
+          exporter: reportingExporter(new OTLPLogExporter(exporterOptions(config, 'logs')), onError),
           maxExportBatchSize: config.maxExportBatchSize,
           maxQueueSize: config.maxQueueSize,
           scheduledDelayMillis: config.scheduledDelayMillis,
@@ -138,7 +176,7 @@ export function createPipeline(
 async function shutdownAll(
   shutdowns: readonly (() => Promise<void>)[],
   timeoutMillis: number,
-  onError: (error: unknown) => void,
+  onError: FailureSink,
 ): Promise<void> {
   // Only the first failure is worth reporting; a later one is almost always the
   // same transport fault seen by another provider, and after a deadline has
@@ -147,7 +185,7 @@ async function shutdownAll(
   const report = (error: unknown): void => {
     if (reported) return
     reported = true
-    onError(error)
+    onError('shutdown', error)
   }
   const sequence = (async () => {
     // Every provider gets its shutdown attempted: an early failure must not
