@@ -42,6 +42,10 @@ describe('signalUrl', () => {
     [BASE, 'traces', 'http://localhost:4000/v1/otlp/v1/traces'],
     [`${BASE}/`, 'metrics', 'http://localhost:4000/v1/otlp/v1/metrics'],
     ['https://db.example.com/v1/otlp', 'logs', 'https://db.example.com/v1/otlp/v1/logs'],
+    // A query string routes tenants in some deployments; appending to href
+    // would push the signal path after it.
+    ['https://db.example.com/v1/otlp?tenant=acme', 'traces', 'https://db.example.com/v1/otlp/v1/traces?tenant=acme'],
+    ['https://db.example.com/otlp/?db=x', 'logs', 'https://db.example.com/otlp/v1/logs?db=x'],
   ] as const)('appends the %s path for %s', (endpoint, signal, expected) => {
     expect(signalUrl(resolveConfig({ endpoint }).endpoint, signal)).toBe(expected)
   })

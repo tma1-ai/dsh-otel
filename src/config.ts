@@ -182,8 +182,13 @@ export function resolveConfig(config: Config): ResolvedConfig {
  * @returns the absolute endpoint the exporter posts to.
  */
 export function signalUrl(endpoint: URL, signal: Signal): string {
-  const base = endpoint.href.endsWith('/') ? endpoint.href.slice(0, -1) : endpoint.href
-  return `${base}/v1/${signal}`
+  // Appending to `href` would land the path after any query string, producing
+  // `...?tenant=acme/v1/traces`. Editing the path keeps a query — which some
+  // deployments use for tenant routing — where it belongs.
+  const url = new URL(endpoint)
+  const base = url.pathname.endsWith('/') ? url.pathname.slice(0, -1) : url.pathname
+  url.pathname = `${base}/v1/${signal}`
+  return url.href
 }
 
 function parseEndpoint(raw: string): URL {

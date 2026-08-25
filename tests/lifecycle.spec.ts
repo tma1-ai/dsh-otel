@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { createPipeline } from '../src/lifecycle.js'
+import { createPipeline, shutdownAll } from '../src/lifecycle.js'
 import { resolveConfig } from '../src/config.js'
 import { emitEvent } from '../src/logs.js'
+import { SessionRecorder } from '../src/recorder.js'
 import { event, resetSeq, T0 } from './fixtures.js'
 
 /** A port nothing listens on, so every export is refused immediately. */
@@ -44,5 +45,61 @@ describe('export failures are reported', () => {
     )
     await pipeline.shutdown()
     expect(failures).toEqual([])
+  }, 30_000)
+})
+
+describe('signals are independently selectable', () => {
+  it.each([
+    { signals: ['traces'] as const, label: 'traces alone' },
+    { signals: ['metrics'] as const, label: 'metrics alone' },
+    { signals: ['logs'] as const, label: 'logs alone' },
+  ])('builds a usable pipeline with $label', ({ signals }) => {
+    // Every accessor must be present regardless of which signals are on;
+    // returning undefined for the disabled ones made callers guard on one
+    // signal to use another, so a single-signal config recorded nothing.
+    const pipeline = createPipeline(
+      resolveConfig({ endpoint: DEAD_ENDPOINT, signals: [...signals] }),
+      '0.0.0-test',
+      () => {},
+    )
+    expect(pipeline.tracer).toBeDefined()
+    expect(pipeline.instruments).toBeDefined()
+    expect(pipeline.logger).toBeDefined()
+  })
+
+  it('records spans when only traces are enabled', async () => {
+    resetSeq()
+    const failures: string[] = []
+    const pipeline = createPipeline(
+      resolveConfig({ endpoint: DEAD_ENDPOINT, signals: ['traces'], scheduledDelayMillis: 50, exportTimeoutMillis: 1_000, shutdownTimeoutMillis: 5_000 }),
+      '0.0.0-test',
+      stage => failures.push(stage),
+    )
+    const recorder = new SessionRecorder('sess-1', pipeline.tracer, pipeline.instruments, T0)
+    recorder.handle(event('turn/start', { turn: 1 }, T0))
+    recorder.handle(event('turn/end', { turn: 1, reason: { kind: 'completed' } }, T0 + 100))
+    await pipeline.shutdown()
+
+    // A refused export proves a span reached the exporter; a no-op tracer
+    // would have produced nothing to send.
+    expect(failures).toContain('export')
+  }, 30_000)
+})
+
+describe('shutdown reaches every provider', () => {
+  it('starts all shutdowns even when the first never resolves', async () => {
+    // Sequential awaits meant a hung first provider kept the rest from ever
+    // beginning, leaving their exporters' timers running past the deadline.
+    const started: string[] = []
+    const shutdowns = [
+      () => { started.push('first'); return new Promise<void>(() => {}) },
+      () => { started.push('second'); return Promise.resolve() },
+      () => { started.push('third'); return Promise.resolve() },
+    ]
+    const failures: string[] = []
+    await shutdownAll(shutdowns, 300, stage => failures.push(stage))
+
+    expect(started).toEqual(['first', 'second', 'third'])
+    expect(failures).toEqual(['shutdown'])
   }, 30_000)
 })

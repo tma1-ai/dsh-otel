@@ -1,6 +1,6 @@
 # Grafana dashboards
 
-Four provisioned dashboards over the data `@tma1-ai/dsh-plugin-greptimedb` writes, plus a compose stack that brings up GreptimeDB and Grafana together.
+Five provisioned dashboards over the data `@tma1-ai/dsh-plugin-greptimedb` writes, plus a compose stack that brings up GreptimeDB and Grafana together.
 
 ![Overview](screenshots/overview.png)
 
@@ -14,7 +14,7 @@ docker compose up -d
 open http://localhost:3000
 ```
 
-Grafana starts with anonymous admin access and both datasources already configured. Point the plugin at `http://localhost:4000/v1/otlp` and the dashboards fill in as the agent runs.
+Grafana starts with anonymous admin access and all three datasources already configured. Point the plugin at `http://localhost:4000/v1/otlp` and the dashboards fill in as the agent runs.
 
 No agent handy? Seed synthetic activity that goes through the plugin's own recorder, so what lands is identical to a real session:
 
@@ -44,10 +44,11 @@ The waterfall shows `invoke_agent dsh` with `chat` and `execute_tool` spans dire
 
 ## Datasources
 
-Two, because they do different jobs:
+Three, because they do different jobs:
 
 - **GreptimeDB** (`mysql`) — GreptimeDB speaks the MySQL wire protocol, so Grafana's built-in datasource reads it with nothing to install. Every SQL panel uses this. Two things to know when editing a query: column names containing dots need backticks, and a Postgres-style interval literal (`INTERVAL '5 minutes'`) is rejected over this protocol even though GreptimeDB's HTTP API accepts it. Use a cast — `date_bin('5 minutes'::INTERVAL, timestamp)` — or the MySQL spelling `INTERVAL 5 MINUTE`.
 - **GreptimeDB-Traces** (`info8fcc-greptimedb-datasource`) — GreptimeDB's own plugin, installed by the compose file. Only it can turn the trace table into Grafana's trace model, which is what the waterfall needs.
+- **GreptimeDB-Prometheus** (`prometheus`) — GreptimeDB serves OTLP metrics through a Prometheus-compatible endpoint, so the Metrics dashboard reads them with PromQL.
 
 ## Verifying the panels
 

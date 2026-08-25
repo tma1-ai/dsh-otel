@@ -11,6 +11,7 @@ import {
   ATTR_DSH_STEP,
   ATTR_DSH_TOOL_OUTCOME,
   ATTR_DSH_USAGE_CACHE_READ_TOKENS,
+  ATTR_ERROR_TYPE,
   ATTR_DSH_RESPONSE_INTERRUPTED,
   ATTR_GEN_AI_PROVIDER_NAME,
   ATTR_GEN_AI_REQUEST_MODEL,
@@ -114,6 +115,21 @@ describe('SessionRecorder span tree', () => {
     expect(chat.attributes[ATTR_GEN_AI_SYSTEM]).toBe('deepseek')
   })
 
+  it('uses a seeded route when the recorder joins mid-session', () => {
+    // After a hot reload the recorder never sees the original request/context,
+    // and DSH only appends one when the route changes.
+    const { recorder, spans } = setup()
+    recorder.seedRoute('deepseek', 'deepseek-reasoner')
+    recorder.handle(event('turn/start', { turn: 1 }, T0))
+    recorder.handle(event('step/start', { turn: 1, step: 1 }, T0 + 10))
+    recorder.handle(assistantMessage({ turn: 1, step: 1, time: T0 + 100 }))
+
+    const chat = byName(spans.getFinishedSpans(), 'chat')
+    expect(chat.name).toBe('chat deepseek-reasoner')
+    expect(chat.attributes[ATTR_GEN_AI_REQUEST_MODEL]).toBe('deepseek-reasoner')
+    expect(chat.attributes[ATTR_GEN_AI_PROVIDER_NAME]).toBe('deepseek')
+  })
+
   it('keeps the placeholder model when no request/context arrives', () => {
     const { recorder, spans } = setup()
     recorder.handle(event('turn/start', { turn: 1 }, T0))
@@ -144,7 +160,26 @@ describe('SessionRecorder chat closure paths', () => {
     expect(chat.status.code).toBe(SpanStatusCode.ERROR)
     expect(hrToMillis(chat.endTime)).toBe(T0 + 500)
     expect(chat.attributes[ATTR_DSH_SPAN_UNCLOSED]).toBeUndefined()
-    expect(chat.events.some(e => e.name === 'exception')).toBe(true)
+    expect(chat.attributes[ATTR_ERROR_TYPE]).toBe('TypeError')
+  })
+
+  it('never puts the error message or stack on the span', () => {
+    // `recordException` would write both as span events, which bypasses the
+    // projection allowlist entirely. Provider error text can quote the prompt.
+    const secret = 'SENTINEL_ERROR_TEXT'
+    const { recorder, spans } = setup()
+    recorder.handle(event('turn/start', { turn: 1 }, T0))
+    recorder.handle(event('step/start', { turn: 1, step: 1 }, T0 + 10))
+    recorder.handle(event('step/end', { turn: 1, step: 1 }, T0 + 500))
+    recorder.fail(1, new Error(`upstream refused: ${secret}`))
+
+    const serialized = JSON.stringify(spans.getFinishedSpans().map(span => ({
+      attributes: span.attributes,
+      events: span.events,
+      status: span.status,
+    })))
+    expect(serialized).not.toContain(secret)
+    expect(serialized).not.toContain('stacktrace')
   })
 
   it('marks an interrupted response without treating it as unclosed', () => {
@@ -241,6 +276,31 @@ describe('token accounting', () => {
     // reasoning is already inside completion_tokens; adding it would double-count.
     expect(chat.attributes[ATTR_GEN_AI_USAGE_OUTPUT_TOKENS]).toBe(50)
     expect(chat.attributes[ATTR_DSH_USAGE_CACHE_READ_TOKENS]).toBe(900)
+  })
+
+  it('keeps agent, model, and tool durations in separate instruments', async () => {
+    // One distribution over all three would mix a whole turn with a single
+    // inference, so its percentiles would describe neither.
+    const { recorder, collect } = setup()
+    recorder.handle(event('turn/start', { turn: 1 }, T0))
+    recorder.handle(event('step/start', { turn: 1, step: 1 }, T0 + 10))
+    recorder.handle(event('request/context', { provider: 'deepseek', model: 'deepseek-chat' }, T0 + 11))
+    recorder.handle(assistantMessage({ turn: 1, step: 1, time: T0 + 100 }))
+    recorder.handle(event('tool/call', { turn: 1, step: 1, callId: callId('c1'), name: 'bash', arguments: '{}' }, T0 + 110))
+    recorder.handle(toolResult({ turn: 1, step: 1, callId: callId('c1'), time: T0 + 200 }))
+    recorder.handle(event('turn/end', { turn: 1, reason: { kind: 'completed' } }, T0 + 300))
+
+    const scope = (await collect()).at(-1)?.scopeMetrics[0]
+    const names = (scope?.metrics ?? []).map(metric => metric.descriptor.name)
+    expect(names).toContain('gen_ai.client.operation.duration')
+    expect(names).toContain('gen_ai.invoke_agent.duration')
+    expect(names).toContain('gen_ai.execute_tool.duration')
+
+    const chat = scope?.metrics.find(m => m.descriptor.name === 'gen_ai.client.operation.duration')
+    // The convention requires the provider dimension on this one.
+    expect(chat?.dataPoints[0]?.attributes['gen_ai.provider.name']).toBe('deepseek')
+    const tool = scope?.metrics.find(m => m.descriptor.name === 'gen_ai.execute_tool.duration')
+    expect(tool?.dataPoints[0]?.attributes['gen_ai.tool.name']).toBe('bash')
   })
 
   it('records the standard token histogram with only input and output types', async () => {

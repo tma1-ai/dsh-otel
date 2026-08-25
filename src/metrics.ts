@@ -18,14 +18,20 @@ import {
   METRIC_DSH_TURNS,
   METRIC_GEN_AI_CLIENT_OPERATION_DURATION,
   METRIC_GEN_AI_CLIENT_TOKEN_USAGE,
+  METRIC_GEN_AI_EXECUTE_TOOL_DURATION,
+  METRIC_GEN_AI_INVOKE_AGENT_DURATION,
 } from './semconv.js'
 
 /** The instrument set every session recorder records into. */
 export interface Instruments {
   /** Billed input and output tokens, split by `gen_ai.token.type`. */
   readonly tokenUsage: Histogram
-  /** Chat and tool operation duration in seconds, per the GenAI convention's unit. */
+  /** Model-call duration in seconds. Covers `chat` only: the convention scopes it to one inference. */
   readonly operationDuration: Histogram
+  /** Whole-turn duration in seconds. */
+  readonly agentDuration: Histogram
+  /** Tool-execution duration in seconds. */
+  readonly toolDuration: Histogram
   /** Cache-read, cache-write, and reasoning token counts, kept off the standard token histogram. */
   readonly tokenDetail: Histogram
   /** Tool invocations by name and outcome. */
@@ -48,7 +54,15 @@ export function createInstruments(meter: Meter): Instruments {
       unit: '{token}',
     }),
     operationDuration: meter.createHistogram(METRIC_GEN_AI_CLIENT_OPERATION_DURATION, {
-      description: 'Duration of a GenAI operation',
+      description: 'Duration of one model call',
+      unit: 's',
+    }),
+    agentDuration: meter.createHistogram(METRIC_GEN_AI_INVOKE_AGENT_DURATION, {
+      description: 'Duration of one agent turn',
+      unit: 's',
+    }),
+    toolDuration: meter.createHistogram(METRIC_GEN_AI_EXECUTE_TOOL_DURATION, {
+      description: 'Duration of one tool execution',
       unit: 's',
     }),
     tokenDetail: meter.createHistogram(METRIC_DSH_TOKEN_DETAIL, {

@@ -64,25 +64,37 @@ export function apply(ctx: Context, config: Config): void {
     }
   }
 
-  const recorderFor = (session: Session): SessionRecorder | undefined => {
-    if (pipeline.tracer === undefined || pipeline.instruments === undefined) return undefined
+  const recorderFor = (session: Session): SessionRecorder => {
     let recorder = recorders.get(session)
     if (recorder === undefined) {
       recorder = new SessionRecorder(session.id, pipeline.tracer, pipeline.instruments, session.header.createdAt)
+      // The log already holds the route; the newest `request/context` is the
+      // one in effect. Replaying more than this would re-emit spans for work
+      // that already happened.
+      for (let index = session.events.length - 1; index >= 0; index -= 1) {
+        const event = session.events[index]
+        if (event?.type !== 'request/context') continue
+        recorder.seedRoute(event.data.provider, event.data.model)
+        break
+      }
       recorders.set(session, recorder)
     }
     return recorder
   }
 
+  // A hot reload mounts a fresh fiber over sessions that are already live and
+  // will not replay `session/created`, so they are adopted here.
+  for (const session of ctx.sessions.list()) {
+    contain(() => { recorderFor(session) })
+  }
+
   ctx.on('session/event', (session: Session, event: SessionEvent) => {
     contain(() => {
       const recorder = recorderFor(session)
-      recorder?.handle(event)
-      if (pipeline.logger !== undefined) {
-        // Emitting inside the turn's context stamps the record with the trace
-        // and span ids, which is what makes a log line navigable to its turn.
-        emitEvent(pipeline.logger, session.id, event, resolved.content, recorder?.activeContext())
-      }
+      recorder.handle(event)
+      // Emitting inside the turn's context stamps the record with the trace
+      // and span ids, which is what makes a log line navigable to its turn.
+      emitEvent(pipeline.logger, session.id, event, resolved.content, recorder.activeContext())
     })
   })
 

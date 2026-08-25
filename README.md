@@ -12,13 +12,19 @@ Send [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) telemet
 No collector. No sidecar. No fork of DSH. It installs as an ordinary plugin, and every turn, model call, and tool execution becomes a row you can query:
 
 ```sql
--- Slowest tool calls, with the model that requested them
-SELECT span_name,
-       "span_attributes.gen_ai.request.model" AS model,
-       duration_nano / 1000000 AS ms
-FROM opentelemetry_traces
-WHERE span_name LIKE 'execute_tool%'
-ORDER BY duration_nano DESC
+-- Slowest tool calls, with the model that requested them.
+-- A tool span carries no model of its own: it is a sibling of the chat span,
+-- so the model comes from the chat span of the same trace and step.
+SELECT tool.span_name,
+       chat."span_attributes.gen_ai.request.model" AS model,
+       tool.duration_nano / 1000000 AS ms
+FROM opentelemetry_traces AS tool
+JOIN opentelemetry_traces AS chat
+  ON  chat.trace_id = tool.trace_id
+  AND chat."span_attributes.dsh.step" = tool."span_attributes.dsh.step"
+  AND chat.span_name LIKE 'chat%'
+WHERE tool.span_name LIKE 'execute_tool%'
+ORDER BY tool.duration_nano DESC
 LIMIT 10;
 ```
 
@@ -64,7 +70,9 @@ docker run -p 127.0.0.1:4000-4003:4000-4003 \
 | `serviceName` | `dsh` | OTel `service.name`. |
 | `logTable` / `traceTable` | GreptimeDB defaults | Destination table overrides. |
 | `shutdownTimeoutMillis` | `3000` | Deadline for the entire teardown sequence. |
-| `metricIntervalMillis`, `maxExportBatchSize`, `maxQueueSize`, `scheduledDelayMillis`, `exportTimeoutMillis` | SDK defaults | Batching and export tuning. `metricIntervalMillis` must be at least `exportTimeoutMillis`. |
+| `metricIntervalMillis` | `30000` | Metric collection period. Must be at least `exportTimeoutMillis`. |
+| `maxExportBatchSize` / `maxQueueSize` | `512` / `2048` | Batch and buffer bounds. |
+| `scheduledDelayMillis` / `exportTimeoutMillis` | `5000` / `30000` | Export cadence and per-request deadline. |
 
 Bad configuration fails at plugin load with the offending field named, not at the first export.
 
@@ -148,7 +156,7 @@ The projection is a positive allowlist, so an event type the plugin does not kno
 
 ## Dashboards
 
-Four Grafana dashboards ship in [`grafana/`](grafana/), along with a compose stack that brings up GreptimeDB and Grafana together.
+Five Grafana dashboards ship in [`grafana/`](grafana/), along with a compose stack that brings up GreptimeDB and Grafana together.
 
 ```sh
 cd grafana && docker compose up -d && open http://localhost:3000
@@ -190,7 +198,7 @@ Four tiers, because each catches what the ones below cannot: unit tests for the 
 
 ## Known limitations
 
-- **DSH is pre-release** and reserves the right to rename and repackage freely before its first tagged release. This plugin reads only the session event stream and documented payload fields, and pins its peer range to the version it is tested against (`0.1.1-rc.2`).
+- **DSH is pre-release** and reserves the right to rename and repackage freely before its first tagged release. This plugin reads only the session event stream and documented payload fields, and its peer range is the exact version CI runs against (`0.1.1-rc.2`) rather than an open upper bound this project cannot vouch for. A new DSH release needs a tested bump here before it is allowed.
 - **The GenAI conventions are experimental.** Names come from `@opentelemetry/semantic-conventions/incubating` and move with it. Spans carry both `gen_ai.provider.name` and the deprecated `gen_ai.system`, because existing dashboards select on the old name.
 - **No per-turn flush.** Export follows the batch processors' cadence. A forced flush per turn would be this pipeline's only source of concurrent flushes, and their interaction with the shutdown drain drops tail records.
 - **Shutdown is bounded, and the bound cannot cancel a transport.** Records in flight when `shutdownTimeoutMillis` expires may be lost at exit. The alternative, an unbounded wait, hangs the CLI.

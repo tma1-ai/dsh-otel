@@ -12,13 +12,19 @@
 不需要 collector，不需要 sidecar，不用 fork DSH。它就是个普通插件，装上之后每一次 turn、模型调用和工具执行都变成一行可查的数据：
 
 ```sql
--- 最慢的工具调用，以及是哪个模型发起的
-SELECT span_name,
-       "span_attributes.gen_ai.request.model" AS model,
-       duration_nano / 1000000 AS ms
-FROM opentelemetry_traces
-WHERE span_name LIKE 'execute_tool%'
-ORDER BY duration_nano DESC
+-- 最慢的工具调用，以及是哪个模型发起的。
+-- tool span 自身不带 model：它是 chat span 的同级节点，
+-- 所以 model 取自同一 trace、同一 step 的 chat span。
+SELECT tool.span_name,
+       chat."span_attributes.gen_ai.request.model" AS model,
+       tool.duration_nano / 1000000 AS ms
+FROM opentelemetry_traces AS tool
+JOIN opentelemetry_traces AS chat
+  ON  chat.trace_id = tool.trace_id
+  AND chat."span_attributes.dsh.step" = tool."span_attributes.dsh.step"
+  AND chat.span_name LIKE 'chat%'
+WHERE tool.span_name LIKE 'execute_tool%'
+ORDER BY tool.duration_nano DESC
 LIMIT 10;
 ```
 
@@ -64,7 +70,9 @@ docker run -p 127.0.0.1:4000-4003:4000-4003 \
 | `serviceName` | `dsh` | OTel `service.name`。 |
 | `logTable` / `traceTable` | GreptimeDB 默认 | 覆盖目标表名。 |
 | `shutdownTimeoutMillis` | `3000` | 整个退出流程的截止时间。 |
-| `metricIntervalMillis`、`maxExportBatchSize`、`maxQueueSize`、`scheduledDelayMillis`、`exportTimeoutMillis` | SDK 默认值 | 批量与导出调优。`metricIntervalMillis` 不得小于 `exportTimeoutMillis`。 |
+| `metricIntervalMillis` | `30000` | metric 采集周期，不得小于 `exportTimeoutMillis`。 |
+| `maxExportBatchSize` / `maxQueueSize` | `512` / `2048` | 批量与缓冲上限。 |
+| `scheduledDelayMillis` / `exportTimeoutMillis` | `5000` / `30000` | 导出节奏与单次请求超时。 |
 
 配置写错会在插件加载时就报错并指明字段，不会拖到第一次导出。
 
@@ -148,7 +156,7 @@ ORDER BY timestamp;
 
 ## Dashboard
 
-[`grafana/`](grafana/) 下有四个 Grafana dashboard，外加一个把 GreptimeDB 和 Grafana 一起拉起来的 compose 栈。
+[`grafana/`](grafana/) 下有五个 Grafana dashboard，外加一个把 GreptimeDB 和 Grafana 一起拉起来的 compose 栈。
 
 ```sh
 cd grafana && docker compose up -d && open http://localhost:3000
@@ -190,7 +198,7 @@ GREPTIMEDB_OTLP_ENDPOINT=http://localhost:4000/v1/otlp pnpm test   # 追加真�
 
 ## 已知限制
 
-- **DSH 处于 pre-release**，官方声明首个正式版本前会自由重命名和重组包结构。本插件只读 session 事件流和已文档化的 payload 字段，peer 版本锁定在实际测试过的版本（`0.1.1-rc.2`）。
+- **DSH 处于 pre-release**，官方声明首个正式版本前会自由重命名和重组包结构。本插件只读 session 事件流和已文档化的 payload 字段，peer 版本就是 CI 实际跑的那个版本（`0.1.1-rc.2`），而不是一个本项目无法担保的开放上界。DSH 出新版需要在这里测试并显式放行。
 - **GenAI 语义规范仍是 experimental。** 名字取自 `@opentelemetry/semantic-conventions/incubating`，会随它变动。span 同时带 `gen_ai.provider.name` 和已废弃的 `gen_ai.system`，因为现存 dashboard 都按旧名过滤。
 - **不做逐 turn flush。** 导出遵循 batch processor 自身节奏。逐 turn 强制 flush 会成为这条管线唯一的并发 flush 来源，与关闭时的 drain 交互会丢失尾部记录。
 - **关闭有时限，但时限无法取消传输。** `shutdownTimeoutMillis` 到期时仍在途的记录可能在退出时丢失。另一种选择是无限等待，那会把 CLI 挂死。

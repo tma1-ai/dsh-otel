@@ -19,9 +19,8 @@ import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-proto'
 import { OTLPMetricExporter } from '@opentelemetry/exporter-metrics-otlp-proto'
 import { OTLPLogExporter } from '@opentelemetry/exporter-logs-otlp-proto'
 import { resourceFromAttributes } from '@opentelemetry/resources'
-import type { Tracer } from '@opentelemetry/api'
-import type { Logger } from '@opentelemetry/api-logs'
-import type { Meter } from '@opentelemetry/api'
+import { metrics, trace, type Tracer } from '@opentelemetry/api'
+import { logs, type Logger } from '@opentelemetry/api-logs'
 import { ATTR_SERVICE_NAME } from './semconv.js'
 import { exporterOptions } from './otlp.js'
 import type { ResolvedConfig } from './config.js'
@@ -70,17 +69,20 @@ function reportingExporter<T extends object>(inner: T, onError: FailureSink): T 
 /**
  * The SDK pipeline for one plugin instance.
  *
- * A provider is absent when its signal is not enabled, and the corresponding
- * accessor is `undefined` — callers branch on presence rather than emitting
- * into a no-op provider, so a disabled signal builds no exporter at all.
+ * Every accessor is always present. A disabled signal gets the API's no-op
+ * implementation, which records nothing and builds no exporter, so each signal
+ * is genuinely independent: enabling only traces still produces spans, and
+ * enabling only metrics still records instruments. Handing back `undefined`
+ * instead made callers guard on one signal to use another, which silently
+ * dropped data for any single-signal configuration.
  */
 export interface Pipeline {
-  /** Span factory, present when traces are enabled. */
-  readonly tracer: Tracer | undefined
-  /** Metric instruments, present when metrics are enabled. */
-  readonly instruments: Instruments | undefined
-  /** Log emitter, present when logs are enabled. */
-  readonly logger: Logger | undefined
+  /** Span factory; a no-op tracer when traces are disabled. */
+  readonly tracer: Tracer
+  /** Metric instruments; backed by a no-op meter when metrics are disabled. */
+  readonly instruments: Instruments
+  /** Log emitter; a no-op logger when logs are disabled. */
+  readonly logger: Logger
   /**
    * Drain and quiesce every constructed provider, bounded by the configured
    * deadline. Never rejects: a shutdown failure is reported through `onError`
@@ -104,7 +106,9 @@ export function createPipeline(
   const resource = resourceFromAttributes({ [ATTR_SERVICE_NAME]: config.serviceName })
   const shutdowns: (() => Promise<void>)[] = []
 
-  let tracer: Tracer | undefined
+  // The API's global providers are never registered by this plugin, so these
+  // resolve to the no-op implementations.
+  let tracer: Tracer = trace.getTracer(SCOPE_NAME, version)
   if (config.signals.has('traces')) {
     const provider = new NodeTracerProvider({
       resource,
@@ -121,7 +125,7 @@ export function createPipeline(
     shutdowns.push(() => provider.shutdown())
   }
 
-  let instruments: Instruments | undefined
+  let instruments: Instruments = createInstruments(metrics.getMeter(SCOPE_NAME, version))
   if (config.signals.has('metrics')) {
     const provider = new MeterProvider({
       resource,
@@ -137,7 +141,7 @@ export function createPipeline(
     shutdowns.push(() => provider.shutdown())
   }
 
-  let logger: Logger | undefined
+  let logger: Logger = logs.getLogger(SCOPE_NAME, version)
   if (config.signals.has('logs')) {
     const provider = new LoggerProvider({
       resource,
@@ -172,8 +176,9 @@ export function createPipeline(
  * @param shutdowns - the provider shutdown thunks.
  * @param timeoutMillis - the deadline covering the whole sequence.
  * @param onError - receives the timeout or the first provider failure.
+ * @returns resolves once the sequence settles or the deadline passes.
  */
-async function shutdownAll(
+export async function shutdownAll(
   shutdowns: readonly (() => Promise<void>)[],
   timeoutMillis: number,
   onError: FailureSink,
@@ -187,19 +192,15 @@ async function shutdownAll(
     reported = true
     onError('shutdown', error)
   }
+  // Every provider's shutdown is STARTED before anything is awaited. Awaiting
+  // them one at a time meant a first provider that never resolves kept the
+  // others from beginning theirs, so the deadline returned with two exporters
+  // still holding their timers.
+  const started = shutdowns.map(shutdown => shutdown())
   const sequence = (async () => {
-    // Every provider gets its shutdown attempted: an early failure must not
-    // leave a later provider's exporter timers running.
-    let first: unknown
-    let failed = false
-    for (const shutdown of shutdowns) {
-      try {
-        await shutdown()
-      } catch (error) {
-        if (!failed) { first = error; failed = true }
-      }
-    }
-    if (failed) throw first
+    const settled = await Promise.allSettled(started)
+    const first = settled.find(outcome => outcome.status === 'rejected')
+    if (first !== undefined) throw (first as PromiseRejectedResult).reason
   })()
   // Observed, not abandoned: a rejection arriving after the deadline would
   // otherwise be unhandled.

@@ -123,6 +123,21 @@ export class SessionRecorder {
   }
 
   /**
+   * Restore the provider route without emitting anything.
+   *
+   * A recorder created mid-session has seen no `request/context`, and DSH only
+   * appends one when the route changes — so after a hot reload every later chat
+   * span would keep the placeholder model and carry no `gen_ai.request.model`,
+   * dropping it out of any dashboard that groups by model.
+   * @param provider - the provider route in effect.
+   * @param model - the model in effect.
+   */
+  seedRoute(provider: string, model: string): void {
+    this.provider = provider
+    this.model = model
+  }
+
+  /**
    * Advance the state machine by one session event.
    * @param event - the appended session event.
    */
@@ -171,7 +186,11 @@ export class SessionRecorder {
     if (open === undefined) return
     this.chatSpans.delete(step)
     const endTime = this.stepEndTimes.get(step) ?? this.lastEventTime
-    open.span.recordException(toException(error), endTime)
+    // Deliberately NOT `recordException`: it writes `exception.message` and
+    // `exception.stacktrace` as span events, which bypasses the projection
+    // allowlist and puts provider text — which can quote the prompt back — on
+    // the wire in every content mode. The stable type is what a receiver can
+    // alert on; the message stays in the host's own logs.
     open.span.setStatus({ code: SpanStatusCode.ERROR })
     open.span.setAttribute(ATTR_ERROR_TYPE, errorType(error))
     open.span.end(endTime)
@@ -314,7 +333,7 @@ export class SessionRecorder {
       if (error !== undefined) open.span.setAttribute(ATTR_DSH_ERROR_CODE, error.code)
     }
     open.span.end(time)
-    this.recordDuration(GEN_AI_OPERATION_NAME_VALUE_EXECUTE_TOOL, open.startTime, time)
+    this.recordDuration(GEN_AI_OPERATION_NAME_VALUE_EXECUTE_TOOL, open.startTime, time, open.toolName)
     this.instruments.toolInvocations.add(1, {
       ...open.toolName === undefined ? {} : { [ATTR_GEN_AI_TOOL_NAME]: open.toolName },
       [ATTR_DSH_TOOL_OUTCOME]: outcome,
@@ -324,7 +343,7 @@ export class SessionRecorder {
   private closeUnclosed(open: OpenSpan, operation: string): void {
     open.span.setAttribute(ATTR_DSH_SPAN_UNCLOSED, true)
     open.span.end(this.lastEventTime)
-    this.recordDuration(operation, open.startTime, this.lastEventTime)
+    this.recordDuration(operation, open.startTime, this.lastEventTime, open.toolName)
   }
 
   private chatAttributes(turn: number, step: number): Attributes {
@@ -392,11 +411,38 @@ export class SessionRecorder {
     }
   }
 
-  private recordDuration(operation: string, startTime: number, endTime: number): void {
-    this.instruments.operationDuration.record(Math.max(0, endTime - startTime) / 1000, {
-      [ATTR_GEN_AI_OPERATION_NAME]: operation,
-      ...this.model === undefined ? {} : { [ATTR_GEN_AI_REQUEST_MODEL]: this.model },
-    })
+  /**
+   * Record one operation's duration into the instrument the conventions define
+   * for it.
+   *
+   * A turn, a model call, and a tool execution are three different metrics
+   * upstream. Folding them into `gen_ai.client.operation.duration` would mix a
+   * whole agent run with a single inference in one distribution, so a p95 over
+   * it would describe neither.
+   * @param operation - the GenAI operation name.
+   * @param startTime - operation start, in epoch milliseconds.
+   * @param endTime - operation end, in epoch milliseconds.
+   * @param toolName - the tool, for the tool-execution instrument's dimension.
+   */
+  private recordDuration(operation: string, startTime: number, endTime: number, toolName?: string): void {
+    const seconds = Math.max(0, endTime - startTime) / 1000
+    switch (operation) {
+      case GEN_AI_OPERATION_NAME_VALUE_INVOKE_AGENT:
+        this.instruments.agentDuration.record(seconds, { [ATTR_GEN_AI_OPERATION_NAME]: operation })
+        return
+      case GEN_AI_OPERATION_NAME_VALUE_EXECUTE_TOOL:
+        this.instruments.toolDuration.record(seconds, {
+          [ATTR_GEN_AI_OPERATION_NAME]: operation,
+          ...toolName === undefined ? {} : { [ATTR_GEN_AI_TOOL_NAME]: toolName },
+        })
+        return
+      default:
+        // `gen_ai.client.operation.duration` requires the provider dimension.
+        this.instruments.operationDuration.record(seconds, {
+          [ATTR_GEN_AI_OPERATION_NAME]: operation,
+          ...this.routeAttributes(),
+        })
+    }
   }
 }
 
@@ -431,10 +477,6 @@ export function usageAttributes(usage: TokenUsage): Attributes {
     ...usage.cacheWriteTokens === undefined ? {} : { [ATTR_DSH_USAGE_CACHE_WRITE_TOKENS]: usage.cacheWriteTokens },
     ...usage.reasoningTokens === undefined ? {} : { [ATTR_DSH_USAGE_REASONING_TOKENS]: usage.reasoningTokens },
   }
-}
-
-function toException(error: unknown): Error {
-  return error instanceof Error ? error : new Error(String(error))
 }
 
 function errorType(error: unknown): string {

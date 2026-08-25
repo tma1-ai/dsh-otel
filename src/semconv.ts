@@ -76,6 +76,19 @@ export const ATTR_DSH_USAGE_CACHE_WRITE_TOKENS = 'dsh.usage.cache_write_tokens'
 /** Reasoning tokens, already counted inside `gen_ai.usage.output_tokens`. */
 export const ATTR_DSH_USAGE_REASONING_TOKENS = 'dsh.usage.reasoning_tokens'
 
+/**
+ * Duration of one agent invocation, per the GenAI conventions' agent metrics.
+ *
+ * Separate from `gen_ai.client.operation.duration`, which covers a single model
+ * call: folding a whole turn into it would mix a 20-second agent run with a
+ * 2-second inference into one distribution. Written as a literal because
+ * `@opentelemetry/semantic-conventions` has not yet published the agent and
+ * tool metrics from the GenAI conventions repository.
+ */
+export const METRIC_GEN_AI_INVOKE_AGENT_DURATION = 'gen_ai.invoke_agent.duration'
+/** Duration of one tool execution; see {@link METRIC_GEN_AI_INVOKE_AGENT_DURATION} for why it is a literal. */
+export const METRIC_GEN_AI_EXECUTE_TOOL_DURATION = 'gen_ai.execute_tool.duration'
+
 /** Counter: tool invocations by name and outcome. */
 export const METRIC_DSH_TOOL_INVOCATIONS = 'dsh.tool.invocations'
 /** Counter: turns opened. */
