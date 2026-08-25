@@ -32,7 +32,7 @@ LIMIT 10;
 dsh plugin --profile headless add @tma1-ai/dsh-plugin-greptimedb
 ```
 
-The package ships a bundle patch, so that one command wires it into the profile. To point it at your own database, override the row in `$DSH_HOME/profiles/<name>/cordis.patch.yml`:
+The package ships a bundle patch, so that one command wires it into the profile. `dsh plugin` forwards to whichever `pnpm` is on your PATH, and a dsh profile directory is its own pnpm workspace root — pnpm 9 refuses to install there and ignores the linker settings dsh writes, so use pnpm 10 or newer. To point it at your own database, override the row in `$DSH_HOME/profiles/<name>/cordis.patch.yml`:
 
 ```yaml
 - id: greptimedb-otel

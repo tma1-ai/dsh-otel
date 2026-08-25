@@ -32,7 +32,7 @@ LIMIT 10;
 dsh plugin --profile headless add @tma1-ai/dsh-plugin-greptimedb
 ```
 
-包自带 bundle patch，这一条命令就把它接进 profile。要指向自己的数据库，在 `$DSH_HOME/profiles/<name>/cordis.patch.yml` 里覆盖这一行：
+包自带 bundle patch，这一条命令就把它接进 profile。`dsh plugin` 会转发给 PATH 上的 `pnpm`，而 dsh 的 profile 目录本身就是一个 pnpm workspace root——pnpm 9 会拒绝在那里安装，也会忽略 dsh 写下的 linker 设置，所以请用 pnpm 10 或更高版本。要指向自己的数据库，在 `$DSH_HOME/profiles/<name>/cordis.patch.yml` 里覆盖这一行：
 
 ```yaml
 - id: greptimedb-otel
