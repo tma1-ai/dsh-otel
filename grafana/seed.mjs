@@ -22,6 +22,10 @@ const logTable = args.get('--log-table') ?? 'dsh_logs'
 // Spread across the window a dashboard opens on, so the charts have shape
 // rather than one dense spike at the right edge.
 const spreadHours = Number(args.get('--spread-hours') ?? '6')
+// Metrics carry the time they were collected, not the time of the events they
+// count, so a single export leaves one data point and `rate()` has nothing to
+// work with. Seeding in batches, each with its own pipeline, produces a series.
+const batches = Number(args.get('--batches') ?? '12')
 
 const MODELS = ['deepseek-chat', 'deepseek-reasoner']
 const TOOLS = ['bash', 'read_file', 'edit_file', 'web_search', 'todo_write']
@@ -35,18 +39,24 @@ const rand = () => {
 const pick = (list) => list[Math.floor(rand() * list.length)]
 const between = (min, max) => Math.floor(min + rand() * (max - min))
 
-const config = resolveConfig({
-  endpoint,
-  logTable,
-  scheduledDelayMillis: 200,
-  exportTimeoutMillis: 5_000,
-  metricIntervalMillis: 5_000,
-})
-const errors = []
-const pipeline = createPipeline(config, '0.0.0-seed', (stage, error) => errors.push(`${stage}: ${String(error)}`))
-if (!pipeline.tracer || !pipeline.instruments || !pipeline.logger) {
-  throw new Error('seed needs all three signals enabled')
+function openPipeline() {
+  const config = resolveConfig({
+    endpoint,
+    logTable,
+    scheduledDelayMillis: 200,
+    exportTimeoutMillis: 5_000,
+    metricIntervalMillis: 5_000,
+  })
+  const failures = []
+  const pipeline = createPipeline(config, '0.0.0-seed', (stage, error) => failures.push(`${stage}: ${String(error)}`))
+  if (!pipeline.tracer || !pipeline.instruments || !pipeline.logger) {
+    throw new Error('seed needs all three signals enabled')
+  }
+  return { pipeline, failures }
 }
+
+const errors = []
+let { pipeline, failures } = openPipeline()
 
 let seq = 0
 const event = (type, data, time) => ({ type, seq: seq++, time, data })
@@ -55,7 +65,16 @@ const now = Date.now()
 const span = spreadHours * 60 * 60 * 1000
 let emitted = 0
 
+const batchSize = Math.max(1, Math.ceil(turnCount / batches))
+
 for (let turn = 1; turn <= turnCount; turn += 1) {
+  if (turn > 1 && (turn - 1) % batchSize === 0) {
+    await pipeline.shutdown()
+    errors.push(...failures)
+    // Give the next batch a distinct collection timestamp.
+    await new Promise(resolve => setTimeout(resolve, 1_200))
+    ;({ pipeline, failures } = openPipeline())
+  }
   const sessionId = `seed-session-${String(Math.ceil(turn / 6))}`
   const recorder = new SessionRecorder(sessionId, pipeline.tracer, pipeline.instruments, now - span)
   const model = pick(MODELS)
@@ -63,7 +82,9 @@ for (let turn = 1; turn <= turnCount; turn += 1) {
 
   const feed = (e) => {
     recorder.handle(e)
-    emitEvent(pipeline.logger, sessionId, e, 'none')
+    // Emitting inside the turn's context is what stamps trace and span ids onto
+    // the record, exactly as the plugin does.
+    emitEvent(pipeline.logger, sessionId, e, 'none', recorder.activeContext())
     emitted += 1
   }
 
@@ -155,8 +176,9 @@ for (let turn = 1; turn <= turnCount; turn += 1) {
 }
 
 await pipeline.shutdown()
+errors.push(...failures)
 if (errors.length > 0) {
   console.error('seed reported export errors:', errors)
   process.exit(1)
 }
-console.log(`seeded ${String(turnCount)} turns (${String(emitted)} events) into ${endpoint}`)
+console.log(`seeded ${String(turnCount)} turns (${String(emitted)} events, ${String(batches)} metric batches) into ${endpoint}`)

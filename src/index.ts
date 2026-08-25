@@ -76,8 +76,13 @@ export function apply(ctx: Context, config: Config): void {
 
   ctx.on('session/event', (session: Session, event: SessionEvent) => {
     contain(() => {
-      recorderFor(session)?.handle(event)
-      if (pipeline.logger !== undefined) emitEvent(pipeline.logger, session.id, event, resolved.content)
+      const recorder = recorderFor(session)
+      recorder?.handle(event)
+      if (pipeline.logger !== undefined) {
+        // Emitting inside the turn's context stamps the record with the trace
+        // and span ids, which is what makes a log line navigable to its turn.
+        emitEvent(pipeline.logger, session.id, event, resolved.content, recorder?.activeContext())
+      }
     })
   })
 

@@ -164,8 +164,9 @@ cd grafana && docker compose up -d && open http://localhost:3000
 | Agent loop | 哪些工具在跑、失败率多少、一个 turn 用了几次模型调用 |
 | Trace explorer | 某一个 turn 内部到底发生了什么，逐 span 看 |
 | Log explorer | 全部 session 事件，可按 session、类型和全文检索过滤 |
+| Metrics | 同样的活动，通过 PromQL 读取，用于更长保留期和不受采样影响的分位数 |
 
-每个 panel 的查询都由 `node grafana/verify.mjs` 对着真实数据库验证过。数据源的分工见 [grafana/README.md](grafana/README.md)，这些查询需要的索引见 [grafana/indexes.sql](grafana/indexes.sql)。
+每个表格都能继续下钻：trace id 打开该 turn 的 waterfall，session id 在 trace 和 log 视图之间跳转。每个 panel 的查询都由 `node grafana/verify.mjs` 对着真实数据库验证过。数据源的分工见 [grafana/README.md](grafana/README.md)，这些查询需要的索引见 [grafana/indexes.sql](grafana/indexes.sql)。
 
 ## 配合 TMA1
 

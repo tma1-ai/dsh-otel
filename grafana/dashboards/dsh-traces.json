@@ -114,24 +114,6 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "trace_id"
-            },
-            "properties": [
-              {
-                "id": "links",
-                "value": [
-                  {
-                    "title": "Open this turn in the waterfall",
-                    "url": "/d/dsh-traces/dsh-trace-explorer?var-trace_id=${__value.raw}&${__url_time_range}",
-                    "targetBlank": false
-                  }
-                ]
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
               "options": "reason"
             },
             "properties": [
@@ -158,6 +140,42 @@
                 "value": {
                   "type": "color-text"
                 }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "trace_id"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open this turn in the trace explorer",
+                    "url": "/d/dsh-traces/a?var-trace_id=${__value.raw}&var-session=%25&var-outcome=all&${__url_time_range}",
+                    "targetBlank": false
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "session"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "See this session in the log explorer",
+                    "url": "/d/dsh-logs/a?var-session=${__value.raw}&var-event_type=%25&var-search=&${__url_time_range}",
+                    "targetBlank": false
+                  }
+                ]
               }
             ]
           }

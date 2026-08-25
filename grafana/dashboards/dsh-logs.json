@@ -178,7 +178,7 @@
     },
     {
       "type": "stat",
-      "title": "Error events",
+      "title": "Errors",
       "datasource": {
         "type": "mysql",
         "uid": "greptimedb"
@@ -527,7 +527,44 @@
             "filterable": true
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "trace_id"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open this turn in the trace explorer",
+                    "url": "/d/dsh-traces/a?var-trace_id=${__value.raw}&var-session=%25&var-outcome=all&${__url_time_range}",
+                    "targetBlank": false
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "session_id"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "See this session in the trace explorer",
+                    "url": "/d/dsh-traces/a?var-session=${__value.raw}&var-trace_id=&var-outcome=all&${__url_time_range}",
+                    "targetBlank": false
+                  }
+                ]
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "showHeader": true,
@@ -544,7 +581,7 @@
             "type": "mysql",
             "uid": "greptimedb"
           },
-          "rawSql": "SELECT timestamp, session_id, event_type, \"turn\", \"step\", body FROM dsh_logs WHERE $__timeFilter(timestamp) AND severity_text = 'ERROR' AND session_id LIKE '$session' AND event_type LIKE '$event_type' AND ('$search' = '' OR matches_term(body, '$search')) ORDER BY timestamp DESC LIMIT 100"
+          "rawSql": "SELECT timestamp, session_id, event_type, \"turn\", \"step\", body, trace_id FROM dsh_logs WHERE $__timeFilter(timestamp) AND severity_text = 'ERROR' AND session_id LIKE '$session' AND event_type LIKE '$event_type' AND ('$search' = '' OR matches_term(body, '$search')) ORDER BY timestamp DESC LIMIT 100"
         }
       ]
     },
@@ -568,7 +605,26 @@
             "filterable": true
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "session_id"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "See this session in the trace explorer",
+                    "url": "/d/dsh-traces/a?var-session=${__value.raw}&var-trace_id=&var-outcome=all&${__url_time_range}",
+                    "targetBlank": false
+                  }
+                ]
+              }
+            ]
+          }
+        ]
       },
       "options": {
         "showHeader": true,

@@ -93,7 +93,7 @@ describe.skipIf(ENDPOINT === undefined)('GreptimeDB round trip', () => {
     const recorder = new SessionRecorder(SESSION_ID, pipeline.tracer, pipeline.instruments, T0)
     for (const e of seededEvents()) {
       recorder.handle(e)
-      emitEvent(pipeline.logger, SESSION_ID, e, 'none')
+      emitEvent(pipeline.logger, SESSION_ID, e, 'none', recorder.activeContext())
     }
     // A second turn whose model request fails before any assistant message.
     recorder.handle(event('turn/start', { turn: 2 }, T0 + 400))
@@ -186,6 +186,27 @@ describe.skipIf(ENDPOINT === undefined)('GreptimeDB round trip', () => {
     expect(logs.columns).toEqual(expect.arrayContaining(['session_id', 'event_type', 'turn', 'step']))
     expect(cell(logs, 0, 'session_id')).toBe(SESSION_ID)
     expect(cell(logs, 0, 'event_type')).toBe('turn/start')
+  })
+
+  it('correlates every log record to the turn it belongs to', async () => {
+    // Without the span context on emit, `trace_id` is an empty string and a log
+    // line has no way back to the turn that produced it.
+    const logs = await sql(
+      `SELECT COUNT(*) AS total, SUM(CASE WHEN trace_id != '' THEN 1 ELSE 0 END) AS correlated
+       FROM ${LOG_TABLE} WHERE session_id = '${SESSION_ID}'`,
+    )
+    const total = Number(cell(logs, 0, 'total'))
+    expect(total).toBeGreaterThan(0)
+    expect(Number(cell(logs, 0, 'correlated'))).toBe(total)
+
+    // Every trace id a log record carries must name a real trace, otherwise
+    // the link exists but leads nowhere.
+    const orphans = await sql(
+      `SELECT COUNT(DISTINCT trace_id) AS orphans FROM ${LOG_TABLE}
+       WHERE session_id = '${SESSION_ID}'
+         AND trace_id NOT IN (SELECT trace_id FROM ${TRACE_TABLE})`,
+    )
+    expect(Number(cell(orphans, 0, 'orphans'))).toBe(0)
   })
 
   it('withholds payloads at content: none', async () => {

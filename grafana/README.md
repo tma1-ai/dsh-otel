@@ -30,8 +30,13 @@ node grafana/seed.mjs --turns 80
 | **DSH · Agent loop** | Which tools ran, how often they failed, how many model calls a turn needed |
 | **DSH · Trace explorer** | What happened inside one specific turn, span by span |
 | **DSH · Log explorer** | Every session event, filterable by session, type, and full-text body search |
+| **DSH · Metrics** | The same activity read through PromQL, for the retention and sampling reasons below |
 
 Overview and Agent loop are the two you leave open. Trace explorer and Log explorer are where you go once something looks wrong.
+
+Metrics covers what traces cannot: they outlive a shorter trace retention, stay whole under trace sampling, and give percentiles from histogram buckets instead of a scan over every span. Its data points carry the time they were collected, not the time of the events they count, so a replay of historical events shows up at replay time.
+
+Every table links onward: a trace id opens that turn's waterfall, a session id jumps between the trace and log views.
 
 ### Why a turn's spans are siblings
 

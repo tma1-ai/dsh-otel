@@ -8,6 +8,7 @@
  * seen, so a panel reading an attribute nothing has written yet fails at plan
  * time rather than showing zero.
  *
+ *
  *   node grafana/verify.mjs [--grafana http://localhost:3000] [--range 24h]
  *
  * @module grafana/verify
@@ -26,26 +27,32 @@ const dashboardDir = join(dirname(fileURLToPath(import.meta.url)), 'dashboards')
 
 /**
  * Execute one panel query through Grafana's datasource proxy.
- * @param target - the panel target carrying `rawSql` and `format`.
+ * @param target - the panel target carrying `rawSql`/`expr` and `format`.
+ * @param datasource - the target's datasource, or the panel's when the target omits it.
  * @param variables - dashboard template variables to substitute.
  * @returns the error message, or the row count on success.
  */
-async function runTarget(target, variables) {
-  let sql = target.rawSql
+async function runTarget(target, datasource, variables) {
   // Grafana expands template variables in the browser. Both spellings occur in
   // these dashboards, and `${name}` must be handled first: replacing `$name`
   // first would leave a stray brace behind.
-  for (const [name, replacement] of variables) {
-    sql = sql.replaceAll(`\${${name}}`, replacement).replaceAll(`$${name}`, replacement)
+  const expand = (text) => {
+    let out = text
+    for (const [name, replacement] of variables) {
+      out = out.replaceAll(`\${${name}}`, replacement).replaceAll(`$${name}`, replacement)
+    }
+    return out
   }
+  const query = target.expr === undefined
+    ? { refId: 'A', datasource, rawSql: expand(target.rawSql), format: target.format ?? 'table' }
+    // A PromQL target needs the range flag and an interval. The datasource
+    // derives `$__rate_interval` from it, and a large interval widens the rate
+    // window past the data, so this mirrors what a real panel width produces.
+    : { refId: 'A', datasource, expr: target.expr, range: true, intervalMs: 15_000, maxDataPoints: 400 }
   const response = await fetch(`${grafana}/api/ds/query`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      queries: [{ refId: 'A', datasource: target.datasource, rawSql: sql, format: target.format ?? 'table' }],
-      from: `now-${range}`,
-      to: 'now',
-    }),
+    body: JSON.stringify({ queries: [query], from: `now-${range}`, to: 'now' }),
   })
   const body = await response.json()
   const result = body.results?.A
@@ -82,13 +89,16 @@ for (const file of readdirSync(dashboardDir).filter(name => name.endsWith('.json
   console.log(`\n${file}  (${dashboard.title})`)
   for (const panel of dashboard.panels ?? []) {
     for (const target of panel.targets ?? []) {
-      if (target.rawSql === undefined) continue
+      if (target.rawSql === undefined && target.expr === undefined) continue
       checked += 1
       // The IN ($model) form needs a real value list; "All" means no filter, so
       // the check runs the unfiltered query the panel produces in that state.
-      const withoutFilter = target.rawSql.includes('IN ($model)')
+      const withoutFilter = target.rawSql !== undefined && target.rawSql.includes('IN ($model)')
+      // A target may omit its datasource and inherit the panel's.
+      const datasource = target.datasource ?? panel.datasource
       const result = await runTarget(
         withoutFilter ? { ...target, rawSql: target.rawSql.replaceAll('AND `span_attributes.gen_ai.request.model` IN ($model)', '') } : target,
+        datasource,
         variables,
       )
       if (result.error !== undefined) {

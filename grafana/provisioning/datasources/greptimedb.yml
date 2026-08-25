@@ -16,6 +16,19 @@ datasources:
       maxIdleConns: 5
       connMaxLifetime: 14400
 
+  # GreptimeDB serves OTLP metrics through a Prometheus-compatible endpoint, so
+  # PromQL reads them directly. Metrics answer what traces cannot: they survive
+  # a shorter trace retention and stay whole under trace sampling.
+  - name: GreptimeDB-Prometheus
+    type: prometheus
+    uid: greptimedb-prometheus
+    url: http://greptimedb:4000/v1/prometheus
+    isDefault: false
+    editable: true
+    jsonData:
+      httpMethod: POST
+      timeInterval: 30s
+
   # GreptimeDB's own datasource. Needed for the trace waterfall: it knows how to
   # turn the trace table into Grafana's trace model, which a SQL datasource
   # cannot do.

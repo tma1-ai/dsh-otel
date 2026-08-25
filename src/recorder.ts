@@ -19,6 +19,7 @@ import {
   SpanStatusCode,
   trace,
   type Attributes,
+  type Context as OtelContext,
   type Span,
   type Tracer,
 } from '@opentelemetry/api'
@@ -96,6 +97,15 @@ export class SessionRecorder {
   private model: string | undefined
   /** Time of the most recent event, the fallback end time for a span with no closing event. */
   private lastEventTime: number
+  /**
+   * Context of the most recent turn, kept after the turn span closes.
+   *
+   * `turn/end` is handled before its own log record is emitted, so reading the
+   * live span would leave exactly the event most worth linking from without a
+   * trace id. Holding the context until the next turn opens also correlates
+   * anything appended between turns to the turn it followed.
+   */
+  private lastContext: OtelContext | undefined
 
   /**
    * @param sessionId - the session this recorder follows.
@@ -211,6 +221,7 @@ export class SessionRecorder {
       },
       ROOT_CONTEXT,
     )
+    this.lastContext = trace.setSpan(ROOT_CONTEXT, this.turnSpan)
     this.instruments.turns.add(1)
   }
 
@@ -345,8 +356,20 @@ export class SessionRecorder {
     }
   }
 
-  private turnContext() {
+  private turnContext(): OtelContext {
     return this.turnSpan === undefined ? ROOT_CONTEXT : trace.setSpan(ROOT_CONTEXT, this.turnSpan)
+  }
+
+  /**
+   * The context of the turn currently open, for correlating other signals.
+   *
+   * A log record emitted with this context carries the turn's trace and span
+   * ids, which is what lets a log line link to the trace it belongs to. Returns
+   * undefined between turns, when there is nothing to correlate to.
+   * @returns the active turn's context, or undefined outside a turn.
+   */
+  activeContext(): OtelContext | undefined {
+    return this.lastContext
   }
 
   private recordUsage(usage: TokenUsage): void {

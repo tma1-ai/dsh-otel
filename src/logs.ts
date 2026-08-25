@@ -8,6 +8,7 @@
  * @module logs
  */
 
+import type { Context as OtelContext } from '@opentelemetry/api'
 import { SeverityNumber, type AnyValue, type Logger } from '@opentelemetry/api-logs'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import type { ContentMode } from './config.js'
@@ -20,8 +21,16 @@ import { projectEvent } from './projection.js'
  * @param sessionId - the owning session's id.
  * @param event - the appended session event.
  * @param mode - the deployment's content policy.
+ * @param context - the active turn's context, so the record carries the trace
+ *   and span ids that link it to the turn it belongs to; omit outside a turn.
  */
-export function emitEvent(logger: Logger, sessionId: string, event: SessionEvent, mode: ContentMode): void {
+export function emitEvent(
+  logger: Logger,
+  sessionId: string,
+  event: SessionEvent,
+  mode: ContentMode,
+  context?: OtelContext,
+): void {
   const projected = projectEvent(sessionId, event, mode)
   if (projected === undefined) return
   const severityNumber = severityOf(event)
@@ -32,6 +41,7 @@ export function emitEvent(logger: Logger, sessionId: string, event: SessionEvent
     severityText: severityNumber === SeverityNumber.ERROR ? 'ERROR' : 'INFO',
     body: projected.body as AnyValue,
     attributes: projected.attributes,
+    ...context === undefined ? {} : { context },
   })
 }
 

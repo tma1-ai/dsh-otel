@@ -164,8 +164,9 @@ cd grafana && docker compose up -d && open http://localhost:3000
 | Agent loop | Which tools ran, how often they failed, how many model calls a turn needed |
 | Trace explorer | What happened inside one specific turn, span by span |
 | Log explorer | Every session event, filterable by session, type, and full-text search |
+| Metrics | The same activity through PromQL, for longer retention and sampling-proof percentiles |
 
-Every panel query is checked against a live database by `node grafana/verify.mjs`. See [grafana/README.md](grafana/README.md) for the datasource split and [grafana/indexes.sql](grafana/indexes.sql) for the indexes these queries want.
+Every table links onward: a trace id opens that turn's waterfall, a session id jumps between the trace and log views. Every panel query is checked against a live database by `node grafana/verify.mjs`. See [grafana/README.md](grafana/README.md) for the datasource split and [grafana/indexes.sql](grafana/indexes.sql) for the indexes these queries want.
 
 ## With TMA1
 
