@@ -1,10 +1,9 @@
 /**
  * Metric instruments recorded alongside spans.
  *
- * The standard `gen_ai.client.*` instruments carry only the values the
- * convention defines, so a dashboard built for any GenAI application reads them
- * unchanged. DSH-specific counts live under `dsh.*` rather than as extra
- * dimensions on the standard instruments, which would make a naive
+ * The standard `gen_ai.client.*` instruments carry only what the convention
+ * defines, so any GenAI dashboard reads them unchanged. DSH-specific counts
+ * live under `dsh.*` rather than as extra dimensions, which would make a naive
  * `SUM(gen_ai.client.token.usage)` double-count.
  *
  * @module metrics
@@ -24,26 +23,19 @@ import {
 
 /** The instrument set every session recorder records into. */
 export interface Instruments {
-  /** Billed input and output tokens, split by `gen_ai.token.type`. */
   readonly tokenUsage: Histogram
-  /** Model-call duration in seconds. Covers `chat` only: the convention scopes it to one inference. */
+  /** `chat` only: the convention scopes this to one inference. */
   readonly operationDuration: Histogram
-  /** Whole-turn duration in seconds. */
   readonly agentDuration: Histogram
-  /** Tool-execution duration in seconds. */
   readonly toolDuration: Histogram
-  /** Cache-read, cache-write, and reasoning token counts, kept off the standard token histogram. */
+  /** Kept off the standard token histogram so a plain sum cannot double-count. */
   readonly tokenDetail: Histogram
-  /** Tool invocations by name and outcome. */
   readonly toolInvocations: Counter
-  /** Turns opened. */
   readonly turns: Counter
-  /** Steps opened. */
   readonly steps: Counter
 }
 
 /**
- * Create the instrument set.
  * @param meter - the meter to register instruments on.
  * @returns the instruments, ready to record.
  */

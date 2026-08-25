@@ -1,34 +1,28 @@
 /**
- * GreptimeDB-specific OTLP transport wiring: per-signal URLs and headers.
+ * Per-signal URLs and headers.
  *
- * GreptimeDB accepts OTLP over HTTP with protobuf encoding only, and reads its
- * routing decisions from request headers rather than from the payload. The
- * trace pipeline header is mandatory, not a tunable: without it GreptimeDB
- * rejects the write.
+ * GreptimeDB routes on request headers rather than payload, and rejects trace
+ * writes that omit the pipeline header, so it is mandatory rather than a knob.
  *
  * @module otlp
  */
 
 import { signalUrl, type ResolvedConfig, type Signal } from './config.js'
 
-/** The pipeline GreptimeDB requires for OTLP trace ingestion. */
+/** Required by GreptimeDB for OTLP trace ingestion. */
 export const TRACE_PIPELINE_NAME = 'greptime_trace_v1'
 
 /**
- * Log attribute keys promoted to real columns via `X-Greptime-Log-Extract-Keys`.
- *
- * These are exactly the keys a session query filters on. They must stay
- * underscore-named and scalar: GreptimeDB rejects array, float, and object
- * values for extraction, and `json_get_*` cannot address a dotted key left in
- * the `log_attributes` JSON column.
+ * Promoted to real columns. They must stay underscore-named and scalar:
+ * extraction rejects non-scalars, and `json_get_*` cannot address a dotted key
+ * left behind in the JSON column.
  */
 export const EXTRACTED_LOG_KEYS = ['session_id', 'event_type', 'turn', 'step'] as const
 
 /**
- * Build the exporter options for one signal.
  * @param config - the resolved plugin configuration.
  * @param signal - the signal being exported.
- * @returns url, headers, and per-request timeout for an OTLP/proto exporter.
+ * @returns url, headers, and timeout for an OTLP/proto exporter.
  */
 export function exporterOptions(
   config: ResolvedConfig,
@@ -42,7 +36,6 @@ export function exporterOptions(
 }
 
 /**
- * Assemble the GreptimeDB headers for one signal.
  * @param config - the resolved plugin configuration.
  * @param signal - the signal being exported.
  * @returns the complete header set for that signal's requests.

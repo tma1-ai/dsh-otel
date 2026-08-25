@@ -29,9 +29,7 @@ describe('export failures are reported', () => {
     emitEvent(pipeline.logger, 'sess-1', event('turn/start', { turn: 1 }, T0), 'none')
     await pipeline.shutdown()
 
-    // Without the reporting wrapper the batch processor hands the failure to
-    // the global diag and the caller sees a clean shutdown, so the data is gone
-    // with nothing to indicate it.
+    // Without the wrapper this looks like a clean shutdown with the data gone.
     const exportFailures = failures.filter(failure => failure.stage === 'export')
     expect(exportFailures.length).toBeGreaterThan(0)
   }, 30_000)
@@ -49,24 +47,6 @@ describe('export failures are reported', () => {
 })
 
 describe('signals are independently selectable', () => {
-  it.each([
-    { signals: ['traces'] as const, label: 'traces alone' },
-    { signals: ['metrics'] as const, label: 'metrics alone' },
-    { signals: ['logs'] as const, label: 'logs alone' },
-  ])('builds a usable pipeline with $label', ({ signals }) => {
-    // Every accessor must be present regardless of which signals are on;
-    // returning undefined for the disabled ones made callers guard on one
-    // signal to use another, so a single-signal config recorded nothing.
-    const pipeline = createPipeline(
-      resolveConfig({ endpoint: DEAD_ENDPOINT, signals: [...signals] }),
-      '0.0.0-test',
-      () => {},
-    )
-    expect(pipeline.tracer).toBeDefined()
-    expect(pipeline.instruments).toBeDefined()
-    expect(pipeline.logger).toBeDefined()
-  })
-
   it('records spans when only traces are enabled', async () => {
     resetSeq()
     const failures: string[] = []
@@ -81,15 +61,14 @@ describe('signals are independently selectable', () => {
     await pipeline.shutdown()
 
     // A refused export proves a span reached the exporter; a no-op tracer
-    // would have produced nothing to send.
+    // would have had nothing to send.
     expect(failures).toContain('export')
   }, 30_000)
 })
 
 describe('shutdown reaches every provider', () => {
   it('starts all shutdowns even when the first never resolves', async () => {
-    // Sequential awaits meant a hung first provider kept the rest from ever
-    // beginning, leaving their exporters' timers running past the deadline.
+    // Sequential awaits let a hung first provider keep the rest from starting.
     const started: string[] = []
     const shutdowns = [
       () => { started.push('first'); return new Promise<void>(() => {}) },

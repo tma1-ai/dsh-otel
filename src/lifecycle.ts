@@ -1,12 +1,10 @@
 /**
  * SDK provider construction and bounded teardown.
  *
- * OTel's own export timeout bounds the export request, not the `forceFlush()`
- * that shutdown awaits first: when the transport never obtains a socket, a
- * provider's shutdown promise can stay pending forever. A CLI that awaits it
- * would never exit, so the whole sequence — all three providers — runs under
- * one plugin-owned deadline, and the abandoned promises stay observed so a late
- * rejection cannot surface as an unhandled rejection.
+ * OTel's export timeout bounds the request, not the `forceFlush()` that
+ * shutdown awaits first, so a transport that never gets a socket leaves the
+ * promise pending and a CLI that awaits it never exits. The whole sequence runs
+ * under one plugin-owned deadline instead.
  *
  * @module lifecycle
  */
@@ -29,25 +27,20 @@ import { createInstruments, type Instruments } from './metrics.js'
 /** Instrumentation scope reported for every span, metric, and log record. */
 export const SCOPE_NAME = '@tma1-ai/dsh-plugin-greptimedb'
 
-/** Where a reported failure came from, so the log line can say which. */
 export type FailureStage = 'export' | 'shutdown'
 
-/** Receives every contained pipeline failure. */
 export type FailureSink = (stage: FailureStage, error: unknown) => void
 
 /**
- * Wrap an exporter so failed exports are reported instead of vanishing.
+ * Report failed exports instead of letting them vanish.
  *
- * The batch processors swallow export failures: they hand the result back to
- * the SDK's global `diag` and nothing else. A GreptimeDB rejection — a schema
- * mismatch, a bad table name, expired credentials — therefore looks exactly
- * like success from the outside, with the data silently absent. Wrapping the
- * exporter is precise (one callback per export) and leaves the process-global
- * `diag` alone for the host application to own.
+ * The batch processors hand failures to the SDK's global `diag` and nothing
+ * else, so a rejected write looks exactly like success with the data absent.
+ * Wrapping is precise and leaves the process-global `diag` to the host.
  *
  * @param inner - the exporter to wrap.
  * @param onError - receives the failure of each rejected export.
- * @returns a proxy delegating everything except the export result inspection.
+ * @returns a proxy that only adds result inspection.
  */
 function reportingExporter<T extends object>(inner: T, onError: FailureSink): T {
   return new Proxy(inner, {
@@ -67,36 +60,23 @@ function reportingExporter<T extends object>(inner: T, onError: FailureSink): T 
 }
 
 /**
- * The SDK pipeline for one plugin instance.
- *
- * Every accessor is always present. A disabled signal gets the API's no-op
- * implementation, which records nothing and builds no exporter, so each signal
- * is genuinely independent: enabling only traces still produces spans, and
- * enabling only metrics still records instruments. Handing back `undefined`
- * instead made callers guard on one signal to use another, which silently
- * dropped data for any single-signal configuration.
+ * Every accessor is always present; a disabled signal gets the API's no-op
+ * implementation. Handing back `undefined` made callers guard on one signal to
+ * use another, which silently dropped data for single-signal configurations.
  */
 export interface Pipeline {
-  /** Span factory; a no-op tracer when traces are disabled. */
   readonly tracer: Tracer
-  /** Metric instruments; backed by a no-op meter when metrics are disabled. */
   readonly instruments: Instruments
-  /** Log emitter; a no-op logger when logs are disabled. */
   readonly logger: Logger
-  /**
-   * Drain and quiesce every constructed provider, bounded by the configured
-   * deadline. Never rejects: a shutdown failure is reported through `onError`
-   * because best-effort telemetry must not fail application teardown.
-   */
+  /** Never rejects: best-effort telemetry must not fail application teardown. */
   shutdown(): Promise<void>
 }
 
 /**
- * Build the SDK pipeline for the enabled signals.
  * @param config - the resolved plugin configuration.
- * @param version - the plugin version, reported as the instrumentation scope version.
+ * @param version - reported as the instrumentation scope version.
  * @param onError - receives every contained export and shutdown failure.
- * @returns the pipeline, whose absent members correspond to disabled signals.
+ * @returns the pipeline; disabled signals are backed by no-op implementations.
  */
 export function createPipeline(
   config: ResolvedConfig,
@@ -106,8 +86,7 @@ export function createPipeline(
   const resource = resourceFromAttributes({ [ATTR_SERVICE_NAME]: config.serviceName })
   const shutdowns: (() => Promise<void>)[] = []
 
-  // The API's global providers are never registered by this plugin, so these
-  // resolve to the no-op implementations.
+  // No global provider is registered, so these resolve to no-ops.
   let tracer: Tracer = trace.getTracer(SCOPE_NAME, version)
   if (config.signals.has('traces')) {
     const provider = new NodeTracerProvider({
@@ -168,11 +147,6 @@ export function createPipeline(
 }
 
 /**
- * Run every provider shutdown under one shared deadline.
- *
- * Providers drain in registration order (traces, metrics, logs) so span exports
- * are attempted before the process is likely to be torn down.
- *
  * @param shutdowns - the provider shutdown thunks.
  * @param timeoutMillis - the deadline covering the whole sequence.
  * @param onError - receives the timeout or the first provider failure.
@@ -183,27 +157,22 @@ export async function shutdownAll(
   timeoutMillis: number,
   onError: FailureSink,
 ): Promise<void> {
-  // Only the first failure is worth reporting; a later one is almost always the
-  // same transport fault seen by another provider, and after a deadline has
-  // already been reported the sequence's own outcome adds nothing.
+  // A later failure is almost always the same transport fault seen again.
   let reported = false
   const report = (error: unknown): void => {
     if (reported) return
     reported = true
     onError('shutdown', error)
   }
-  // Every provider's shutdown is STARTED before anything is awaited. Awaiting
-  // them one at a time meant a first provider that never resolves kept the
-  // others from beginning theirs, so the deadline returned with two exporters
-  // still holding their timers.
+  // All started before anything is awaited: awaiting one at a time let a hung
+  // first provider keep the others from ever beginning.
   const started = shutdowns.map(shutdown => shutdown())
   const sequence = (async () => {
     const settled = await Promise.allSettled(started)
     const first = settled.find(outcome => outcome.status === 'rejected')
     if (first !== undefined) throw (first as PromiseRejectedResult).reason
   })()
-  // Observed, not abandoned: a rejection arriving after the deadline would
-  // otherwise be unhandled.
+  // Observed so a post-deadline rejection is not unhandled.
   sequence.catch(report)
   let timer: ReturnType<typeof setTimeout> | undefined
   const deadline = new Promise<never>((_resolve, reject) => {

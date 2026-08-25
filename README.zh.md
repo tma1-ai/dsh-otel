@@ -87,7 +87,7 @@ invoke_agent dsh              turn/start → turn/end
 └── chat deepseek-chat
 ```
 
-是同级，不是嵌套。DSH 先写 `assistant/message`，之后才执行这条消息请求的工具，所以 tool span 若挂在 chat span 下，起始时间会晚于父节点的结束时间，waterfall 和延迟视图都会失真。
+用同级而非嵌套，是因为 DSH 先写 `assistant/message`，之后才执行这条消息请求的工具。tool span 若挂在 chat span 下，起始时间会晚于父节点的结束时间，waterfall 和延迟视图都会失真。
 
 时间戳取自触发它的那个 session 事件，不取处理时刻的时钟。
 
@@ -97,10 +97,10 @@ chat span 有四条闭合路径，每条都有确定的结束时间：
 |---|---|---|
 | 模型正常返回 | `assistant/message` | OK |
 | 流式过程被中断 | `assistant/message` | OK，加 `dsh.response.interrupted` |
-| 请求失败 | 该 step 的 `step/end` | ERROR，并记录异常 |
+| 请求失败 | 该 step 的 `step/end` | ERROR，带错误类型 |
 | 没有结束事件（崩溃、退出） | 最后一个事件的时间 | UNSET，加 `dsh.span.unclosed` |
 
-最后一行只覆盖真正缺失边界的情况。失败的请求是被测量的，不是被打包丢掉。
+最后一行只用于边界事件真的没到的情况。失败的请求仍然有真实耗时。
 
 ### Token 口径
 
@@ -150,7 +150,7 @@ ORDER BY timestamp;
 | `full` | 增加用户与助手的消息正文、工具参数、工具结果。 |
 | `full+prompt` | 增加 `request/header`：完整 system prompt 和全部工具 schema。 |
 
-有两样东西在任何模式下都不离开进程：工具私有的 `meta` 载荷（设计上就不透明且任意），以及失败 turn 的内部 `error.message`（可能回显 prompt 的 provider 文本）。
+有三样东西在任何模式下都不离开进程：工具私有的 `meta` 载荷、失败 turn 的内部 `error.message`，以及请求失败时的异常消息和堆栈。它们都是可能回显 prompt 的 provider 或工具文本。
 
 投影层是正向白名单，插件不认识的事件类型——包括未来某个 DSH 插件声明的——只导出身份标识。DSH 自带的 `session-telemetry-otel` 默认方向相反：`FULL` 模式发送完整 `event.data`，含 system prompt，且自身不带任何脱敏规则。
 

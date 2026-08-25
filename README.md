@@ -87,9 +87,9 @@ invoke_agent dsh              turn/start → turn/end
 └── chat deepseek-chat
 ```
 
-Siblings, not nesting. DSH appends `assistant/message` first and executes the requested tools afterwards, so a tool span nested under a chat span would start after its parent ended. That breaks waterfall and latency views.
+They are siblings rather than nested because DSH appends `assistant/message` first and runs the requested tools afterwards. A tool span nested under the chat span would start after its parent had already ended, which breaks every waterfall and latency view.
 
-Timestamps come from the session event that justifies them, never from a clock read while handling it.
+Every timestamp comes from the session event it belongs to, not from a clock read while the event is being handled.
 
 A chat span closes on one of four paths, each with a defined end time:
 
@@ -97,10 +97,10 @@ A chat span closes on one of four paths, each with a defined end time:
 |---|---|---|
 | Model responded | `assistant/message` | OK |
 | Stream interrupted | `assistant/message` | OK, plus `dsh.response.interrupted` |
-| Request failed | that step's `step/end` | ERROR, exception recorded |
+| Request failed | that step's `step/end` | ERROR, with the error type |
 | No end event (crash, teardown) | last event seen | UNSET, plus `dsh.span.unclosed` |
 
-The last row covers genuinely missing boundaries only. A failed request is measured, not written off.
+The last row is only for a boundary that never arrived. A failed request still gets its real duration.
 
 ### Token accounting
 
@@ -150,7 +150,7 @@ Attributes are underscore-named because GreptimeDB keeps unextracted ones in a J
 | `full` | Adds user and assistant message content, tool arguments, tool results. |
 | `full+prompt` | Adds `request/header`: the complete system prompt and every tool schema. |
 
-Two things never leave in any mode: a tool's private `meta` payload (opaque and arbitrary by design) and the internal `error.message` of a failed turn (provider text that can quote the prompt back).
+Three things never leave in any mode: a tool's private `meta` payload, the internal `error.message` of a failed turn, and the message and stack of a failed request. All of it is provider or tool text that can quote the prompt back.
 
 The projection is a positive allowlist, so an event type the plugin does not know — including one a future DSH plugin declares — exports its identity and nothing else. DSH's own `session-telemetry-otel` defaults the other way: its `FULL` mode ships the complete `event.data`, system prompt included, with no redaction rules of its own.
 

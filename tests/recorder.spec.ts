@@ -72,8 +72,7 @@ describe('SessionRecorder span tree', () => {
 
     expect(chat.parentSpanContext?.spanId).toBe(turn.spanContext().spanId)
     expect(tool.parentSpanContext?.spanId).toBe(turn.spanContext().spanId)
-    // The loop appends assistant/message before running tools, so a nested
-    // layout would put the child entirely after its parent's end.
+    // A nested layout would put the child entirely after its parent's end.
     expect(hrToMillis(tool.startTime)).toBeGreaterThanOrEqual(hrToMillis(chat.endTime))
     expect(tool.attributes[ATTR_DSH_STEP]).toBe(1)
     expect(chat.attributes[ATTR_DSH_STEP]).toBe(1)
@@ -102,8 +101,7 @@ describe('SessionRecorder span tree', () => {
   })
 
   it('emits the deprecated gen_ai.system alongside gen_ai.provider.name', () => {
-    // Existing GenAI dashboards select on `gen_ai.system`; a span without it
-    // does not appear in them at all.
+    // A span without it is invisible to existing GenAI dashboards.
     const { recorder, spans } = setup()
     recorder.handle(event('turn/start', { turn: 1 }, T0))
     recorder.handle(event('step/start', { turn: 1, step: 1 }, T0 + 10))
@@ -116,8 +114,7 @@ describe('SessionRecorder span tree', () => {
   })
 
   it('uses a seeded route when the recorder joins mid-session', () => {
-    // After a hot reload the recorder never sees the original request/context,
-    // and DSH only appends one when the route changes.
+    // DSH appends request/context only on change, so a reload never sees it.
     const { recorder, spans } = setup()
     recorder.seedRoute('deepseek', 'deepseek-reasoner')
     recorder.handle(event('turn/start', { turn: 1 }, T0))
@@ -150,8 +147,7 @@ describe('SessionRecorder chat closure paths', () => {
     recorder.handle(event('turn/start', { turn: 1 }, T0))
     recorder.handle(event('step/start', { turn: 1, step: 1 }, T0 + 10))
     recorder.handle(event('request/context', { provider: 'deepseek', model: 'deepseek-chat' }, T0 + 11))
-    // No assistant/message: the request threw. step/end is appended in a
-    // finally, so it lands before agent/error reaches this recorder.
+    // step/end is appended in a finally, so it lands before agent/error.
     recorder.handle(event('step/end', { turn: 1, step: 1 }, T0 + 500))
     recorder.fail(1, new TypeError('socket hang up'))
     recorder.handle(event('turn/end', { turn: 1, reason: { kind: 'error', error: { message: 'x', code: 'UNKNOWN' } } }, T0 + 510))
@@ -164,8 +160,7 @@ describe('SessionRecorder chat closure paths', () => {
   })
 
   it('never puts the error message or stack on the span', () => {
-    // `recordException` would write both as span events, which bypasses the
-    // projection allowlist entirely. Provider error text can quote the prompt.
+    // `recordException` writes both as span events, bypassing the allowlist.
     const secret = 'SENTINEL_ERROR_TEXT'
     const { recorder, spans } = setup()
     recorder.handle(event('turn/start', { turn: 1 }, T0))
@@ -273,14 +268,13 @@ describe('token accounting', () => {
 
     const chat = byName(spans.getFinishedSpans(), 'chat')
     expect(chat.attributes[ATTR_GEN_AI_USAGE_INPUT_TOKENS]).toBe(1_000)
-    // reasoning is already inside completion_tokens; adding it would double-count.
+    // Already inside completion_tokens.
     expect(chat.attributes[ATTR_GEN_AI_USAGE_OUTPUT_TOKENS]).toBe(50)
     expect(chat.attributes[ATTR_DSH_USAGE_CACHE_READ_TOKENS]).toBe(900)
   })
 
   it('keeps agent, model, and tool durations in separate instruments', async () => {
-    // One distribution over all three would mix a whole turn with a single
-    // inference, so its percentiles would describe neither.
+    // One distribution over all three would describe none of them.
     const { recorder, collect } = setup()
     recorder.handle(event('turn/start', { turn: 1 }, T0))
     recorder.handle(event('step/start', { turn: 1, step: 1 }, T0 + 10))
@@ -297,7 +291,7 @@ describe('token accounting', () => {
     expect(names).toContain('gen_ai.execute_tool.duration')
 
     const chat = scope?.metrics.find(m => m.descriptor.name === 'gen_ai.client.operation.duration')
-    // The convention requires the provider dimension on this one.
+    // Required by the convention on this metric.
     expect(chat?.dataPoints[0]?.attributes['gen_ai.provider.name']).toBe('deepseek')
     const tool = scope?.metrics.find(m => m.descriptor.name === 'gen_ai.execute_tool.duration')
     expect(tool?.dataPoints[0]?.attributes['gen_ai.tool.name']).toBe('bash')

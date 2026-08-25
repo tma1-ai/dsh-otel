@@ -1,15 +1,13 @@
 /**
  * Per-session span and metric state machine.
  *
- * Spans are reconstructed from an append-only event stream rather than from
- * async context, so parents are threaded explicitly and every timestamp comes
- * from the event that justifies it — never from a wall clock read at handling
- * time, which would drift from the log by the whole handler latency.
+ * Spans are rebuilt from an append-only event stream, not from async context,
+ * so parents are threaded explicitly and timestamps come from events rather
+ * than a wall clock that would drift by the handler latency.
  *
- * The chat/tool sibling layout is forced by the loop's real order: DSH appends
- * `assistant/message` and only then executes the tools that message requested.
- * Nesting tool spans under a chat span that ends at `assistant/message` would
- * place every child entirely after its parent's end.
+ * Chat and tool spans are siblings because DSH appends `assistant/message`
+ * before running the tools it requested; nesting would put every child after
+ * its parent's end.
  *
  * @module recorder
  */
@@ -59,7 +57,7 @@ import {
   GEN_AI_TOKEN_TYPE_VALUE_OUTPUT,
 } from './semconv.js'
 
-/** Span name used before `request/context` reveals the model. */
+/** Used before `request/context` reveals the model. */
 const UNKNOWN_MODEL = 'unknown'
 
 /** A span still awaiting its closing event. */
@@ -83,27 +81,19 @@ export class SessionRecorder {
   private turnSpan: Span | undefined
   private turnStartTime = 0
   private turnNumber = 0
-  /** Chat spans by step number; a turn has at most one open chat span per step. */
+  /** At most one open chat span per step. */
   private readonly chatSpans = new Map<number, OpenSpan>()
-  /** Tool spans by call id, the only key that survives the call/result gap. */
+  /** Keyed by call id, the only identifier that survives the call/result gap. */
   private readonly toolSpans = new Map<string, OpenSpan>()
-  /**
-   * Last `step/end` time per step. `step/end` is appended in a `finally` and
-   * therefore always precedes `agent/error`, making it the correct end time for
-   * a chat span that failed before producing an assistant message.
-   */
+  /** `step/end` is appended in a `finally`, so it precedes `agent/error` and is the right end time for a failed request. */
   private readonly stepEndTimes = new Map<number, number>()
   private provider: string | undefined
   private model: string | undefined
-  /** Time of the most recent event, the fallback end time for a span with no closing event. */
+  /** Fallback end time for a span whose closing event never arrives. */
   private lastEventTime: number
   /**
-   * Context of the most recent turn, kept after the turn span closes.
-   *
-   * `turn/end` is handled before its own log record is emitted, so reading the
-   * live span would leave exactly the event most worth linking from without a
-   * trace id. Holding the context until the next turn opens also correlates
-   * anything appended between turns to the turn it followed.
+   * Held past `turn/end` because that event is handled before its own log
+   * record is emitted, and it is the one most worth linking from.
    */
   private lastContext: OtelContext | undefined
 
@@ -123,12 +113,9 @@ export class SessionRecorder {
   }
 
   /**
-   * Restore the provider route without emitting anything.
-   *
-   * A recorder created mid-session has seen no `request/context`, and DSH only
-   * appends one when the route changes — so after a hot reload every later chat
-   * span would keep the placeholder model and carry no `gen_ai.request.model`,
-   * dropping it out of any dashboard that groups by model.
+   * Restore the route for a recorder that joins mid-session. DSH appends
+   * `request/context` only on change, so without this a hot reload leaves every
+   * later chat span on the placeholder model.
    * @param provider - the provider route in effect.
    * @param model - the model in effect.
    */
@@ -167,17 +154,12 @@ export class SessionRecorder {
           event.data.error,
         )
       default:
-        // Every other event type — chunks, todos, headers, and plugin-declared
-        // types — moves no span boundary.
         return
     }
   }
 
   /**
-   * Close the chat span for a failed model request.
-   *
-   * The loop appends `step/end` in a `finally` before emitting `agent/error`,
-   * so the step's recorded end time is available and is the honest boundary.
+   * Close the chat span for a failed model request at its step's recorded end.
    * @param step - the step whose request failed.
    * @param error - the thrown value.
    */
@@ -198,11 +180,8 @@ export class SessionRecorder {
   }
 
   /**
-   * Close every span still open, marking each as lacking its own end event.
-   *
-   * Called at session disposal and at plugin teardown. The end time is the last
-   * event seen, so a span's duration stays a lower bound rather than absorbing
-   * the idle time until shutdown.
+   * Close every open span, marked as lacking its own end event. Ends at the last
+   * event seen so durations stay lower bounds instead of absorbing idle time.
    */
   closeAll(): void {
     for (const [step, open] of this.chatSpans) {
@@ -221,8 +200,7 @@ export class SessionRecorder {
   }
 
   private startTurn(turn: number, time: number): void {
-    // A turn/start with a turn span still open means the previous turn's
-    // turn/end never arrived (crash, or a log whose tail was lost).
+    // An open turn span here means the previous turn/end never arrived.
     if (this.turnSpan !== undefined) this.closeAll()
     this.turnNumber = turn
     this.turnStartTime = time
@@ -245,8 +223,7 @@ export class SessionRecorder {
   }
 
   private endTurn(reason: string, time: number): void {
-    // Tool results land within their turn; anything still open at turn/end has
-    // no result event coming.
+    // Tool results land within their turn, so anything still open has none coming.
     for (const [step, open] of this.chatSpans) {
       this.chatSpans.delete(step)
       this.closeUnclosed(open, GEN_AI_OPERATION_NAME_VALUE_CHAT)
@@ -277,8 +254,7 @@ export class SessionRecorder {
   private setRoute(provider: string, model: string): void {
     this.provider = provider
     this.model = model
-    // request/context is appended inside the step, after its chat span opened
-    // with a placeholder name.
+    // Appended inside the step, after the chat span opened with a placeholder.
     for (const open of this.chatSpans.values()) {
       open.span.updateName(`${GEN_AI_OPERATION_NAME_VALUE_CHAT} ${model}`)
       open.span.setAttribute(ATTR_GEN_AI_REQUEST_MODEL, model)
@@ -327,8 +303,7 @@ export class SessionRecorder {
     open.span.setAttribute(ATTR_DSH_TOOL_OUTCOME, outcome)
     if (isError) {
       open.span.setStatus({ code: SpanStatusCode.ERROR })
-      // `error` is optional internal failure identity; `isError` already
-      // decided the outcome, so its absence is not a success signal.
+      // `isError` already decided the outcome; a missing `error` is not success.
       open.span.setAttribute(ATTR_ERROR_TYPE, error?.name ?? 'tool_error')
       if (error !== undefined) open.span.setAttribute(ATTR_DSH_ERROR_CODE, error.code)
     }
@@ -380,12 +355,9 @@ export class SessionRecorder {
   }
 
   /**
-   * The context of the turn currently open, for correlating other signals.
-   *
-   * A log record emitted with this context carries the turn's trace and span
-   * ids, which is what lets a log line link to the trace it belongs to. Returns
-   * undefined between turns, when there is nothing to correlate to.
-   * @returns the active turn's context, or undefined outside a turn.
+   * Context for correlating other signals; a log emitted with it carries the
+   * turn's trace and span ids.
+   * @returns the last turn's context, or undefined before the first turn.
    */
   activeContext(): OtelContext | undefined {
     return this.lastContext
@@ -412,13 +384,9 @@ export class SessionRecorder {
   }
 
   /**
-   * Record one operation's duration into the instrument the conventions define
-   * for it.
-   *
-   * A turn, a model call, and a tool execution are three different metrics
-   * upstream. Folding them into `gen_ai.client.operation.duration` would mix a
-   * whole agent run with a single inference in one distribution, so a p95 over
-   * it would describe neither.
+   * Record a duration into the instrument the conventions define for it. One
+   * shared histogram would mix a whole agent run with a single inference, and a
+   * p95 over that describes neither.
    * @param operation - the GenAI operation name.
    * @param startTime - operation start, in epoch milliseconds.
    * @param endTime - operation end, in epoch milliseconds.
@@ -447,13 +415,8 @@ export class SessionRecorder {
 }
 
 /**
- * Billed input tokens.
- *
- * DSH reports disjoint counts: `inputTokens` is uncached input only, with cache
- * hits and writes accounted separately. The GenAI convention's
- * `gen_ai.usage.input_tokens` is the billed total, so exporting `inputTokens`
- * alone would understate every cached request.
- *
+ * DSH reports disjoint counts, so `inputTokens` alone understates every cached
+ * request; the convention's `input_tokens` is the billed total.
  * @param usage - the provider-reported accounting for one model call.
  * @returns uncached input plus cache reads plus cache writes.
  */
@@ -462,15 +425,13 @@ export function billedInputTokens(usage: TokenUsage): number {
 }
 
 /**
- * Build the token attributes for a chat span.
  * @param usage - the provider-reported accounting for one model call.
  * @returns standard billed totals plus the DSH breakdown.
  */
 export function usageAttributes(usage: TokenUsage): Attributes {
   return {
     [ATTR_GEN_AI_USAGE_INPUT_TOKENS]: billedInputTokens(usage),
-    // `outputTokens` already includes reasoning tokens; adding them would
-    // double-count.
+    // Already includes reasoning tokens; adding them would double-count.
     [ATTR_GEN_AI_USAGE_OUTPUT_TOKENS]: usage.outputTokens,
     [ATTR_DSH_USAGE_UNCACHED_INPUT_TOKENS]: usage.inputTokens,
     ...usage.cacheReadTokens === undefined ? {} : { [ATTR_DSH_USAGE_CACHE_READ_TOKENS]: usage.cacheReadTokens },

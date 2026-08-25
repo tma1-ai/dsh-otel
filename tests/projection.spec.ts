@@ -5,7 +5,7 @@ import { assistantMessage, callId, event, resetSeq, toolResult, userMessage, T0 
 
 const SESSION_ID = 'sess-1'
 
-/** One distinct marker per payload channel, so a leak names its own source. */
+/** One marker per channel, so a leak names its own source. */
 const SENTINELS = {
   userPrompt: 'SENTINEL_USER_PROMPT',
   assistantText: 'SENTINEL_ASSISTANT_TEXT',
@@ -97,7 +97,7 @@ describe('content: full', () => {
     const projected = projectAll('full+prompt')
     expect(projected).toContain(SENTINELS.systemPrompt)
     expect(projected).toContain(SENTINELS.toolSchema)
-    // `meta` is tool-private and opaque; no mode exports it.
+    // No mode exports `meta`.
     expect(projected).not.toContain(SENTINELS.toolMeta)
   })
 })

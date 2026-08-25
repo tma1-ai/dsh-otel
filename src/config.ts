@@ -1,52 +1,35 @@
 /**
- * Plugin configuration and its explicit resolution step.
+ * Plugin configuration and its resolution step.
  *
- * {@link Config} is what a `cordis.yml` author writes; {@link ResolvedConfig} is
- * what the rest of the plugin consumes. Defaulting and validation happen once
- * in {@link resolveConfig} so no downstream module carries a `?? default`, and
- * every rejection names the field that caused it.
+ * Defaulting and validation happen once in {@link resolveConfig}, so no
+ * downstream module carries a `?? default` and every rejection names its field.
  *
  * @module config
  */
 
 import z from '@deepseek-ai/schemastery'
 
-/** Signals this plugin can export. */
 export type Signal = 'traces' | 'metrics' | 'logs'
 
-/** Every signal, in the order the shutdown sequence drains them. */
+/** Ordered as the shutdown sequence drains them. */
 export const ALL_SIGNALS: readonly Signal[] = ['traces', 'metrics', 'logs']
 
-/**
- * How much of a session event's payload may leave the process.
- *
- * `none` emits structure and accounting only. `full` adds conversation and tool
- * payloads. `full+prompt` additionally allows `request/header`, which carries
- * the complete system prompt and every tool schema.
- */
+/** `none` is structure and accounting only; `full` adds payloads; `full+prompt` also releases the system prompt and tool schemas. */
 export type ContentMode = 'none' | 'full' | 'full+prompt'
 
-/** Default outer allowance for the whole three-provider shutdown sequence. */
 export const DEFAULT_SHUTDOWN_TIMEOUT_MILLIS = 3_000
-/** Default metric collection period. */
 export const DEFAULT_METRIC_INTERVAL_MILLIS = 30_000
-/** Default span/log batch size handed to one export request. */
 export const DEFAULT_MAX_EXPORT_BATCH_SIZE = 512
-/** Default upper bound on spans/records buffered before new ones are dropped. */
 export const DEFAULT_MAX_QUEUE_SIZE = 2_048
-/** Default delay between batch exports. */
 export const DEFAULT_SCHEDULED_DELAY_MILLIS = 5_000
-/** Default per-request export deadline. */
 export const DEFAULT_EXPORT_TIMEOUT_MILLIS = 30_000
-/** Default GreptimeDB database. */
 export const DEFAULT_DATABASE = 'public'
-/** Default OTel `service.name`. */
 export const DEFAULT_SERVICE_NAME = 'dsh'
 
 /** Node clamps larger timer delays to one millisecond; a runtime limit, not a tunable. */
 const MAX_TIMER_DELAY_MILLIS = 2_147_483_647
 
-/** Plugin configuration as written in `cordis.yml`. */
+/** As written in `cordis.yml`. */
 export interface Config {
   /**
    * GreptimeDB OTLP base endpoint, e.g. `http://localhost:4000/v1/otlp`. Each
@@ -54,33 +37,26 @@ export interface Config {
    * a per-signal path here is a misconfiguration.
    */
   endpoint: string
-  /** GreptimeDB database name; sent as `X-Greptime-DB-Name`. */
+  /** Sent as `X-Greptime-DB-Name`. */
   database?: string
   /** Basic-auth user. Authorization is sent only when both this and {@link password} are non-empty. */
   username?: string
-  /** Basic-auth password. */
   password?: string
-  /** Signals to export; omitting a signal builds none of its SDK pipeline. */
+  /** Omitting a signal builds none of its SDK pipeline. */
   signals?: Signal[]
-  /** How much event payload may be exported; defaults to the structure-only `none`. */
+  /** Defaults to the structure-only `none`. */
   content?: ContentMode
-  /** OTel `service.name` on the exported Resource. */
   serviceName?: string
   /** Table for logs; sent as `X-Greptime-Log-Table-Name`. GreptimeDB defaults to `opentelemetry_logs`. */
   logTable?: string
   /** Table for traces; sent as `X-Greptime-Trace-Table-Name`. GreptimeDB defaults to `opentelemetry_traces`. */
   traceTable?: string
-  /** Outer deadline for the entire shutdown sequence across all three providers. */
+  /** Covers the entire shutdown sequence, not one provider. */
   shutdownTimeoutMillis?: number
-  /** Metric reader collection period. */
   metricIntervalMillis?: number
-  /** Spans/records per export request. */
   maxExportBatchSize?: number
-  /** Buffered spans/records before new ones are dropped. */
   maxQueueSize?: number
-  /** Delay between batch exports. */
   scheduledDelayMillis?: number
-  /** Per-request export deadline. */
   exportTimeoutMillis?: number
 }
 
@@ -110,7 +86,7 @@ export const Config: z<Config> = z.object({
   exportTimeoutMillis: z.number(),
 })
 
-/** Configuration after defaulting and validation; the only form the plugin's internals read. */
+/** The only form the plugin's internals read. */
 export interface ResolvedConfig {
   readonly endpoint: URL
   readonly database: string

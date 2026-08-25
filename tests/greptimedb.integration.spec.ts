@@ -79,8 +79,7 @@ describe.skipIf(ENDPOINT === undefined)('GreptimeDB round trip', () => {
       endpoint: ENDPOINT ?? '',
       logTable: LOG_TABLE,
       traceTable: TRACE_TABLE,
-      // Export as soon as the batch closes rather than waiting out the default
-      // cadence; shutdown below is what actually forces the drain.
+      // shutdown below is what forces the drain.
       scheduledDelayMillis: 100,
       exportTimeoutMillis: 5_000,
       metricIntervalMillis: 5_000,
@@ -131,8 +130,7 @@ describe.skipIf(ENDPOINT === undefined)('GreptimeDB round trip', () => {
     for (const name of ['chat deepseek-chat', 'execute_tool bash']) {
       expect(cell(spans, names.indexOf(name), 'parent_span_id')).toBe(turnSpanId)
     }
-    // The loop runs tools after the assistant message, so the tool span must
-    // start at or after the chat span's end.
+    // Tools run after the assistant message.
     const chatEnd = Number(cell(spans, names.indexOf('chat deepseek-chat'), 'timestamp_end'))
     const toolStart = Number(cell(spans, names.indexOf('execute_tool bash'), 'timestamp'))
     expect(toolStart).toBeGreaterThanOrEqual(chatEnd)
@@ -169,9 +167,7 @@ describe.skipIf(ENDPOINT === undefined)('GreptimeDB round trip', () => {
   })
 
   it('marks no span as unclosed when every boundary event arrived', async () => {
-    // GreptimeDB creates a column per attribute actually written, so the
-    // absence of the column is the strongest available assertion that no span
-    // in this session took the fallback path.
+    // A column exists only once something writes the attribute.
     const all = await sql(`SELECT * FROM ${TRACE_TABLE} LIMIT 1`)
     expect(all.columns).not.toContain('span_attributes.dsh.span.unclosed')
   })
@@ -181,16 +177,14 @@ describe.skipIf(ENDPOINT === undefined)('GreptimeDB round trip', () => {
       `SELECT session_id, event_type, turn, step FROM ${LOG_TABLE}
        WHERE session_id = '${SESSION_ID}' ORDER BY timestamp LIMIT 5`,
     )
-    // Reaching this row through named columns — not json_get_string — is the
-    // assertion: a dotted attribute key would be unaddressable here.
+    // A dotted attribute key would be unaddressable through named columns.
     expect(logs.columns).toEqual(expect.arrayContaining(['session_id', 'event_type', 'turn', 'step']))
     expect(cell(logs, 0, 'session_id')).toBe(SESSION_ID)
     expect(cell(logs, 0, 'event_type')).toBe('turn/start')
   })
 
   it('correlates every log record to the turn it belongs to', async () => {
-    // Without the span context on emit, `trace_id` is an empty string and a log
-    // line has no way back to the turn that produced it.
+    // Without span context on emit, `trace_id` is empty and the link is gone.
     const logs = await sql(
       `SELECT COUNT(*) AS total, SUM(CASE WHEN trace_id != '' THEN 1 ELSE 0 END) AS correlated
        FROM ${LOG_TABLE} WHERE session_id = '${SESSION_ID}'`,
@@ -199,8 +193,7 @@ describe.skipIf(ENDPOINT === undefined)('GreptimeDB round trip', () => {
     expect(total).toBeGreaterThan(0)
     expect(Number(cell(logs, 0, 'correlated'))).toBe(total)
 
-    // Every trace id a log record carries must name a real trace, otherwise
-    // the link exists but leads nowhere.
+    // A link that names no trace leads nowhere.
     const orphans = await sql(
       `SELECT COUNT(DISTINCT trace_id) AS orphans FROM ${LOG_TABLE}
        WHERE session_id = '${SESSION_ID}'

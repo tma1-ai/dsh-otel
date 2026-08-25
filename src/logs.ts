@@ -1,9 +1,8 @@
 /**
  * Session events as OTLP log records.
  *
- * Severity is pre-mapped at emit time so a receiver can alert without knowing
- * anything about DSH: a tool result whose block says `isError`, and a turn that
- * ended with the `error` reason, are the two facts that make a record `ERROR`.
+ * Severity is mapped at emit time so a receiver can alert without knowing
+ * anything about DSH.
  *
  * @module logs
  */
@@ -15,8 +14,6 @@ import type { ContentMode } from './config.js'
 import { projectEvent } from './projection.js'
 
 /**
- * Emit one session event as a log record.
- *
  * @param logger - the logger to emit through.
  * @param sessionId - the owning session's id.
  * @param event - the appended session event.
@@ -46,9 +43,8 @@ export function emitEvent(
 }
 
 /**
- * Map an event onto an alerting severity.
  * @param event - the session event.
- * @returns `ERROR` for events whose own payload reports failure, `INFO` otherwise.
+ * @returns `ERROR` when the event's own payload reports failure.
  */
 function severityOf(event: SessionEvent): SeverityNumber {
   if (event.type === 'tool/result') {
