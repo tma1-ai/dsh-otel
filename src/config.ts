@@ -207,8 +207,10 @@ function resolveTtl(value: string | undefined): string | undefined {
   if (value === undefined) return DEFAULT_TTL
   if (value === '') return undefined
   // The value is spliced into `x-greptime-hints`, whose pairs are comma
-  // separated: anything outside this set could append a second hint.
-  if (!/^[A-Za-z0-9 ]+$/.test(value)) {
+  // separated: anything outside this set could append a second hint. Single
+  // interior spaces only — GreptimeDB rejects the whole write when the hint
+  // holds no parsable duration, which would silently export nothing.
+  if (!/^[A-Za-z0-9]+( [A-Za-z0-9]+)*$/.test(value)) {
     throw new Error(`@tma1-ai/dsh-plugin-greptimedb: ttl must be a duration such as 180d, or forever, got ${JSON.stringify(value)}`)
   }
   return value

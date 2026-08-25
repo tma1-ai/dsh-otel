@@ -28,6 +28,9 @@ describe('resolveConfig', () => {
     ['a metric interval below the export timeout', { endpoint: BASE, metricIntervalMillis: 1_000, exportTimeoutMillis: 5_000 }, /must be at least exportTimeoutMillis/],
     // A comma would close the ttl pair and open another hint.
     ['a ttl that carries a second hint', { endpoint: BASE, ttl: '180d,append_mode=false' }, /ttl must be a duration/],
+    // GreptimeDB answers 400 to every write whose hint holds no duration, so a
+    // blank one must not reach the wire: `''` is the documented opt-out.
+    ['a blank ttl that is not the opt-out', { endpoint: BASE, ttl: '   ' }, /ttl must be a duration/],
   ])('rejects %s', (_label, config, message) => {
     // The cast models a cordis.yml author writing an invalid value; the schema
     // catches types, this step catches ranges and formats.
