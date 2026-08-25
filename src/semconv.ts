@@ -3,8 +3,7 @@
  *
  * Standard GenAI names are re-exported from `@opentelemetry/semantic-conventions`
  * rather than written as string literals, so a semconv upgrade moves them here
- * and nowhere else. `gen_ai.system` is deliberately absent: it is deprecated in
- * favour of `gen_ai.provider.name`.
+ * and nowhere else.
  *
  * @module semconv
  */
