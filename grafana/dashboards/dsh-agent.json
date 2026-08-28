@@ -492,7 +492,7 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
+        "w": 12,
         "x": 0,
         "y": 22
       },
@@ -540,8 +540,8 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 8,
+        "w": 12,
+        "x": 12,
         "y": 22
       },
       "fieldConfig": {
@@ -575,6 +575,101 @@
       ]
     },
     {
+      "type": "row",
+      "title": "Where turn time went",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 30
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Turn time split",
+      "description": "Average turn against its wall time. The gap under the line is the loop around the work; a stack above it is tools running in parallel, since these are summed span durations. Unclosed turn spans are excluded.",
+      "datasource": {
+        "type": "mysql",
+        "uid": "greptimedb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 31
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 2,
+          "custom": {
+            "fillOpacity": 20,
+            "lineWidth": 1,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "total_s"
+            },
+            "properties": [
+              {
+                "id": "custom.stacking",
+                "value": {
+                  "mode": "none"
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 2
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "text"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawQuery": true,
+          "datasource": {
+            "type": "mysql",
+            "uid": "greptimedb"
+          },
+          "rawSql": "SELECT date_bin('15 minutes'::INTERVAL, started) AS time, ROUND(AVG(chat_ns) / 1000000000.0, 2) AS model_s, ROUND(AVG(tool_ns) / 1000000000.0, 2) AS tool_s, ROUND(AVG(turn_ns) / 1000000000.0, 2) AS total_s FROM (SELECT trace_id, MIN(timestamp) AS started, MAX(CASE WHEN span_name = 'invoke_agent dsh' AND `span_attributes.dsh.span.unclosed` IS NULL THEN duration_nano END) AS turn_ns, SUM(CASE WHEN `span_attributes.gen_ai.system` IS NOT NULL THEN duration_nano ELSE 0 END) AS chat_ns, SUM(CASE WHEN `span_attributes.gen_ai.tool.name` IS NOT NULL THEN duration_nano ELSE 0 END) AS tool_ns FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND `span_attributes.dsh.session.id` IS NOT NULL GROUP BY trace_id) WHERE turn_ns IS NOT NULL GROUP BY time ORDER BY time"
+        }
+      ]
+    },
+    {
       "type": "table",
       "title": "Slowest turns",
       "datasource": {
@@ -583,9 +678,9 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 8,
-        "x": 16,
-        "y": 22
+        "w": 12,
+        "x": 12,
+        "y": 31
       },
       "fieldConfig": {
         "defaults": {
@@ -596,8 +691,8 @@
         "overrides": [
           {
             "matcher": {
-              "id": "byName",
-              "options": "seconds"
+              "id": "byRegexp",
+              "options": "^(seconds|model_s|tool_s)$"
             },
             "properties": [
               {
@@ -659,9 +754,10 @@
             "type": "mysql",
             "uid": "greptimedb"
           },
-          "rawSql": "SELECT `span_attributes.dsh.session.id` AS session, `span_attributes.dsh.turn` AS turn, `span_attributes.dsh.turn.end_reason` AS reason, ROUND(duration_nano / 1000000000.0, 2) AS seconds, trace_id FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND span_name = 'invoke_agent dsh' ORDER BY duration_nano DESC LIMIT 20"
+          "rawSql": "SELECT session, turn, ROUND(turn_ns / 1000000000.0, 2) AS seconds, ROUND(chat_ns / 1000000000.0, 2) AS model_s, ROUND(tool_ns / 1000000000.0, 2) AS tool_s, trace_id FROM (SELECT trace_id, MAX(`span_attributes.dsh.session.id`) AS session, MAX(`span_attributes.dsh.turn`) AS turn, MAX(CASE WHEN span_name = 'invoke_agent dsh' THEN duration_nano END) AS turn_ns, SUM(CASE WHEN `span_attributes.gen_ai.system` IS NOT NULL THEN duration_nano ELSE 0 END) AS chat_ns, SUM(CASE WHEN `span_attributes.gen_ai.tool.name` IS NOT NULL THEN duration_nano ELSE 0 END) AS tool_ns FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND `span_attributes.dsh.session.id` IS NOT NULL GROUP BY trace_id) WHERE turn_ns IS NOT NULL ORDER BY turn_ns DESC LIMIT 20"
         }
-      ]
+      ],
+      "description": "Wall time of the turn, and the summed span durations inside it. Model plus tool below total is the loop overhead; above it means tools overlapped."
     }
   ]
 }
