@@ -901,7 +901,7 @@
     {
       "type": "barchart",
       "title": "Spend by turn outcome",
-      "description": "What the turns you paid for ended up doing. `unfinished` is a turn whose end event never arrived. A turn counts under the model its calls used.",
+      "description": "What the turns you paid for ended up doing. `unfinished` is a turn whose end event never arrived. Spend is attributed per model call, so a turn that switched models splits across them.",
       "datasource": {
         "type": "mysql",
         "uid": "greptimedb"
@@ -939,7 +939,7 @@
             "type": "mysql",
             "uid": "greptimedb"
           },
-          "rawSql": "SELECT COALESCE(reason, 'unfinished') AS reason, ROUND(SUM(spend), 4) AS spend FROM (SELECT trace_id, MAX(CASE WHEN span_name = 'invoke_agent dsh' THEN `span_attributes.dsh.turn.end_reason` END) AS reason, MAX(`span_attributes.gen_ai.request.model`) AS model, (SUM(COALESCE(`span_attributes.dsh.usage.uncached_input_tokens`, 0)) * $price_in + SUM(COALESCE(`span_attributes.dsh.usage.cache_read_tokens`, 0)) * $price_cache_read + SUM(COALESCE(`span_attributes.dsh.usage.cache_write_tokens`, 0)) * $price_cache_write + SUM(COALESCE(`span_attributes.gen_ai.usage.output_tokens`, 0)) * $price_out) / 1000000.0 AS spend FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND `span_attributes.dsh.session.id` IS NOT NULL GROUP BY trace_id) WHERE model IN ($model) GROUP BY reason ORDER BY spend DESC"
+          "rawSql": "SELECT COALESCE(reason, 'unfinished') AS reason, ROUND(SUM(spend), 4) AS spend FROM (SELECT model, MAX(reason) OVER (PARTITION BY trace_id) AS reason, spend FROM (SELECT trace_id, `span_attributes.gen_ai.request.model` AS model, MAX(CASE WHEN span_name = 'invoke_agent dsh' THEN `span_attributes.dsh.turn.end_reason` END) AS reason, (SUM(COALESCE(`span_attributes.dsh.usage.uncached_input_tokens`, 0)) * $price_in + SUM(COALESCE(`span_attributes.dsh.usage.cache_read_tokens`, 0)) * $price_cache_read + SUM(COALESCE(`span_attributes.dsh.usage.cache_write_tokens`, 0)) * $price_cache_write + SUM(COALESCE(`span_attributes.gen_ai.usage.output_tokens`, 0)) * $price_out) / 1000000.0 AS spend FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND `span_attributes.dsh.session.id` IS NOT NULL GROUP BY trace_id, model)) WHERE model IN ($model) GROUP BY reason ORDER BY spend DESC"
         },
         {
           "refId": "B",
