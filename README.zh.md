@@ -203,7 +203,7 @@ GREPTIMEDB_OTLP_ENDPOINT=http://localhost:4000/v1/otlp pnpm test   # 追加真�
 
 ## 已知限制
 
-- **DSH 处于 pre-release**，首个正式版本前会自由重命名和重组包结构。插件只用 DSH 的类型，不对它们声明 peer 版本，因为 DSH 的每个版本都是预发布版，而 semver 不会匹配 range 里没有写明的预发布版。这里锁任何 range，下一个 `-rc` 都会失效。CI 跑的是 `0.1.1-rc.2`，重命名要在那里发现，安装时不会拦。发布出去的 `.d.ts` 仍然 import 这些类型，所以在没有 DSH 的环境下对本包做类型检查，要么开 `skipLibCheck`，要么把那几个 DSH 包一起装上。
+- **DSH 处于 pre-release**，首个正式版本前会自由重命名和重组包结构。插件只用它的类型，所以不声明 peer 版本：DSH 每个版本都是预发布版，而 semver 不匹配 range 里没写明的预发布版，锁哪个 range 都会在下一个 `-rc` 上失效。代价是 DSH 改了名字，装的时候不报错，要等 CI 跑到才知道；CI 跑的是 `0.1.1-rc.2`。`.d.ts` 里还留着这些类型的 import，在没有 DSH 的环境里做类型检查，要开 `skipLibCheck`，或者把 DSH 那几个包一起装上。
 - **GenAI 语义规范仍是 experimental。** 名字取自 `@opentelemetry/semantic-conventions/incubating`，会随它变动。span 同时带 `gen_ai.provider.name` 和已废弃的 `gen_ai.system`。
 - **`ttl` 覆盖不到 metric 表。** metric 走 metric engine，保留期是 physical table 的属性。hint 只到得了逻辑表，逻辑表会存下并显示它，但不会执行（[greptimedb#8951](https://github.com/GreptimeTeam/greptimedb/issues/8951)）。请自行 `ALTER TABLE greptime_physical_table SET 'ttl' = '180d'`。
 - **不做逐 turn flush。** 导出遵循 batch processor 自身节奏。
