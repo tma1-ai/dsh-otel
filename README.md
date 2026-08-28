@@ -139,10 +139,14 @@ The breakdown stays queryable as `dsh.usage.uncached_input_tokens`, `dsh.usage.c
 | Instrument | Type | Dimensions |
 |---|---|---|
 | `gen_ai.client.token.usage` | Histogram | `gen_ai.token.type` (`input`/`output` only), model, provider |
-| `gen_ai.client.operation.duration` | Histogram | `gen_ai.operation.name`, model |
-| `dsh.token.detail` | Histogram | `dsh.token.detail_kind` (`cache_read`/`cache_write`/`reasoning`) |
+| `gen_ai.client.operation.duration` | Histogram | `gen_ai.operation.name`, model, provider |
+| `gen_ai.invoke_agent.duration` | Histogram | `gen_ai.operation.name` |
+| `gen_ai.execute_tool.duration` | Histogram | `gen_ai.operation.name`, `gen_ai.tool.name` |
+| `dsh.token.detail` | Histogram | `dsh.token.detail_kind` (`cache_read`/`cache_write`/`reasoning`), model, provider |
 | `dsh.tool.invocations` | Counter | `gen_ai.tool.name`, `dsh.tool.outcome` |
 | `dsh.turns` / `dsh.steps` | Counter | |
+
+Durations are three instruments, not one. A turn, a tool execution, and a model call differ by orders of magnitude, so a percentile over their union describes none of them.
 
 ## Logs
 

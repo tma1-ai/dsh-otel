@@ -139,10 +139,14 @@ gen_ai.usage.output_tokens = outputTokens          （已含 reasoning tokens）
 | 指标 | 类型 | 维度 |
 |---|---|---|
 | `gen_ai.client.token.usage` | Histogram | `gen_ai.token.type`（只有 `input`/`output`）、model、provider |
-| `gen_ai.client.operation.duration` | Histogram | `gen_ai.operation.name`、model |
-| `dsh.token.detail` | Histogram | `dsh.token.detail_kind`（`cache_read`/`cache_write`/`reasoning`） |
+| `gen_ai.client.operation.duration` | Histogram | `gen_ai.operation.name`、model、provider |
+| `gen_ai.invoke_agent.duration` | Histogram | `gen_ai.operation.name` |
+| `gen_ai.execute_tool.duration` | Histogram | `gen_ai.operation.name`、`gen_ai.tool.name` |
+| `dsh.token.detail` | Histogram | `dsh.token.detail_kind`（`cache_read`/`cache_write`/`reasoning`）、model、provider |
 | `dsh.tool.invocations` | Counter | `gen_ai.tool.name`、`dsh.tool.outcome` |
 | `dsh.turns` / `dsh.steps` | Counter | |
+
+耗时分成三个 instrument，不是一个。一个 turn、一次工具执行和一次模型调用的量级差着数量级，混在一起算分位数，哪一个都说明不了。
 
 ## Logs
 
