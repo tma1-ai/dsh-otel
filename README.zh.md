@@ -7,9 +7,9 @@
 
 [English](README.md) | 中文
 
-把 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的运行数据以 OpenTelemetry traces、metrics、logs 写入 [GreptimeDB](https://github.com/GreptimeTeam/greptimedb)。
+[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 跑一次花了多少 token、多少钱、多少时间，以 OpenTelemetry traces、metrics、logs 写进 [GreptimeDB](https://github.com/GreptimeTeam/greptimedb)。
 
-不需要 collector，不需要 sidecar，不用 fork DSH。它就是个普通插件，装上之后每一次 turn、模型调用和工具执行都变成一行可查的数据：
+七个 Grafana dashboard 直接读这些数据。不需要 collector，不需要 sidecar，不用 fork DSH。它就是个普通插件，装上之后每一次 turn、模型调用和工具执行都变成一行可查的数据：
 
 ```sql
 -- 最慢的工具调用，以及是哪个模型发起的。
@@ -46,11 +46,12 @@ dsh plugin --profile headless add @tma1-ai/dsh-plugin-greptimedb
 
 profile patch 是整体替换目标行的 `config`，不是深合并，所以要保留的字段必须全部重述。
 
-默认配置直接指向本地 GreptimeDB。[`grafana/`](grafana/) 下的 compose 栈会连同 Grafana 和七个配好的 [dashboard](#dashboard) 一起拉起来：
+默认配置直接指向本地 GreptimeDB。[`grafana/`](grafana/) 下的 compose 栈会连同 Grafana 和七个配好的 [dashboard](#dashboard) 一起拉起来。Grafana 的 provisioning 要从磁盘读这些 dashboard，所以取这一个目录就行，不用 clone 整个仓库：
 
 ```sh
-git clone https://github.com/tma1-ai/dsh-otel.git
-cd dsh-otel/grafana && docker compose up -d && open http://localhost:3000
+curl -fsSL https://github.com/tma1-ai/dsh-otel/archive/main.tar.gz \
+  | tar -xz --strip-components=1 dsh-otel-main/grafana
+cd grafana && docker compose up -d && open http://localhost:3000
 ```
 
 只要数据库的话，GreptimeDB 自带的控制台在 <http://localhost:4000/dashboard/>，看表和跑临时 SQL 够用：
@@ -202,7 +203,7 @@ GREPTIMEDB_OTLP_ENDPOINT=http://localhost:4000/v1/otlp pnpm test   # 追加真�
 
 ## 已知限制
 
-- **DSH 处于 pre-release**，首个正式版本前会自由重命名和重组包结构。peer 版本就是 CI 实际跑的那个版本（`0.1.1-rc.2`），DSH 出新版需要在这里测试后再放行。
+- **DSH 处于 pre-release**，首个正式版本前会自由重命名和重组包结构。插件只用它的类型，所以不声明 peer 版本：DSH 每个版本都是预发布版，而 semver 不匹配 range 里没写明的预发布版，锁哪个 range 都会在下一个 `-rc` 上失效。代价是 DSH 改了名字，装的时候不报错，要等 CI 跑到才知道；CI 跑的是 `0.1.1-rc.2`。`.d.ts` 里还留着这些类型的 import，在没有 DSH 的环境里做类型检查，要开 `skipLibCheck`，或者把 DSH 那几个包一起装上。
 - **GenAI 语义规范仍是 experimental。** 名字取自 `@opentelemetry/semantic-conventions/incubating`，会随它变动。span 同时带 `gen_ai.provider.name` 和已废弃的 `gen_ai.system`。
 - **`ttl` 覆盖不到 metric 表。** metric 走 metric engine，保留期是 physical table 的属性。hint 只到得了逻辑表，逻辑表会存下并显示它，但不会执行（[greptimedb#8951](https://github.com/GreptimeTeam/greptimedb/issues/8951)）。请自行 `ALTER TABLE greptime_physical_table SET 'ttl' = '180d'`。
 - **不做逐 turn flush。** 导出遵循 batch processor 自身节奏。
