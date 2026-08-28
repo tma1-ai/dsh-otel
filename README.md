@@ -32,7 +32,7 @@ LIMIT 10;
 dsh plugin --profile headless add @tma1-ai/dsh-plugin-greptimedb
 ```
 
-The package ships a bundle patch, so that one command wires it into the profile. `dsh plugin` forwards to whichever `pnpm` is on your PATH, and a dsh profile directory is its own pnpm workspace root — pnpm 9 refuses to install there and ignores the linker settings dsh writes, so use pnpm 10 or newer. To point it at your own database, override the row in `$DSH_HOME/profiles/<name>/cordis.patch.yml`:
+The package ships a bundle patch, so that one command wires it into the profile. `dsh plugin` forwards to whichever `pnpm` is on your PATH, and a dsh profile directory is its own pnpm workspace root. pnpm 9 refuses to install there and ignores the linker settings dsh writes, so use pnpm 10 or newer. To point it at your own database, override the row in `$DSH_HOME/profiles/<name>/cordis.patch.yml`:
 
 ```yaml
 - id: greptimedb-otel
@@ -46,7 +46,14 @@ The package ships a bundle patch, so that one command wires it into the profile.
 
 A profile patch replaces the row's whole `config` instead of merging into it, so restate every field you want to keep.
 
-The defaults already point at a local GreptimeDB:
+The defaults already point at a local GreptimeDB. The compose stack under [`grafana/`](grafana/) starts one with Grafana and the seven [dashboards](#dashboards) already provisioned:
+
+```sh
+git clone https://github.com/tma1-ai/dsh-otel.git
+cd dsh-otel/grafana && docker compose up -d && open http://localhost:3000
+```
+
+For the database alone, GreptimeDB's own console at <http://localhost:4000/dashboard/> is enough to check the tables and run ad-hoc SQL:
 
 ```sh
 docker run -p 127.0.0.1:4000-4003:4000-4003 \
@@ -56,7 +63,7 @@ docker run -p 127.0.0.1:4000-4003:4000-4003 \
   --mysql-addr 0.0.0.0:4002 --postgres-addr 0.0.0.0:4003
 ```
 
-That instance serves GreptimeDB's own console at <http://localhost:4000/dashboard/> — enough to check the tables and run ad-hoc SQL before bringing up Grafana.
+Both bind port 4000, so run one or the other.
 
 ## Configuration
 
@@ -145,15 +152,11 @@ ORDER BY timestamp;
 
 Three things never leave in any mode: a tool's private `meta` payload, the internal `error.message` of a failed turn, and the message and stack of a failed request.
 
-The projection is a positive allowlist, so an event type the plugin does not know — including one a future DSH plugin declares — exports its identity and nothing else.
+The projection is a positive allowlist, so an event type the plugin does not know exports its identity and nothing else. That includes types a future DSH plugin declares.
 
 ## Dashboards
 
-Seven Grafana dashboards ship in [`grafana/`](grafana/), along with a compose stack that brings up GreptimeDB and Grafana together.
-
-```sh
-cd grafana && docker compose up -d && open http://localhost:3000
-```
+Seven Grafana dashboards ship in [`grafana/`](grafana/). The compose stack in [Install](#install) provisions all of them.
 
 ![Overview](https://raw.githubusercontent.com/tma1-ai/dsh-otel/main/grafana/screenshots/overview.png)
 
@@ -173,9 +176,9 @@ cd grafana && docker compose up -d && open http://localhost:3000
 
 Cost prices the token counts with four rates you set in the dashboard's own variables, per million tokens: uncached input, cache read, cache write, output. The defaults are DeepSeek's published `deepseek-v4-flash` peak rates in CNY — `3.0`, `0.10`, `3.0`, `9.0`. The same rates in USD are `0.44`, `0.014`, `0.44`, `1.32`.
 
-The Currency picker changes the symbol every panel formats with, not the rates, so retype those when you switch. Its values are Grafana units — `currencyUSD` and `prefix:¥` — and another currency is one more option on that variable.
+The Currency picker changes the symbol every panel formats with, not the rates, so retype those when you switch. Its values are Grafana units, `currencyUSD` and `prefix:¥`; another currency is one more option on that variable.
 
-One rate set applies to every selected model, so pick a single model when you run several at different prices. It is an estimate — it knows nothing about your contract or a provider's time-of-day discount.
+One rate set applies to every selected model, so pick a single model when you run several at different prices. The result is an estimate; it does not account for your contract price or a provider's time-of-day discount.
 
 Every table links onward: a trace id opens that turn's waterfall, a session id jumps between the trace and log views. Every panel query is checked against a live database by `node grafana/verify.mjs`. See [grafana/README.md](grafana/README.md) for the datasource split and [grafana/indexes.sql](grafana/indexes.sql) for the indexes these queries want.
 

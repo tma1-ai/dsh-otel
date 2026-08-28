@@ -32,7 +32,7 @@ LIMIT 10;
 dsh plugin --profile headless add @tma1-ai/dsh-plugin-greptimedb
 ```
 
-包自带 bundle patch，这一条命令就把它接进 profile。`dsh plugin` 会转发给 PATH 上的 `pnpm`，而 dsh 的 profile 目录本身就是一个 pnpm workspace root——pnpm 9 会拒绝在那里安装，也会忽略 dsh 写下的 linker 设置，所以请用 pnpm 10 或更高版本。要指向自己的数据库，在 `$DSH_HOME/profiles/<name>/cordis.patch.yml` 里覆盖这一行：
+包自带 bundle patch，这一条命令就把它接进 profile。`dsh plugin` 会转发给 PATH 上的 `pnpm`，而 dsh 的 profile 目录本身就是一个 pnpm workspace root。pnpm 9 会拒绝在那里安装，也会忽略 dsh 写下的 linker 设置，所以用 pnpm 10 或更高版本。要指向自己的数据库，在 `$DSH_HOME/profiles/<name>/cordis.patch.yml` 里覆盖这一行：
 
 ```yaml
 - id: greptimedb-otel
@@ -46,7 +46,14 @@ dsh plugin --profile headless add @tma1-ai/dsh-plugin-greptimedb
 
 profile patch 是整体替换目标行的 `config`，不是深合并，所以要保留的字段必须全部重述。
 
-默认配置直接指向本地 GreptimeDB：
+默认配置直接指向本地 GreptimeDB。[`grafana/`](grafana/) 下的 compose 栈会连同 Grafana 和七个配好的 [dashboard](#dashboard) 一起拉起来：
+
+```sh
+git clone https://github.com/tma1-ai/dsh-otel.git
+cd dsh-otel/grafana && docker compose up -d && open http://localhost:3000
+```
+
+只要数据库的话，GreptimeDB 自带的控制台在 <http://localhost:4000/dashboard/>，看表和跑临时 SQL 够用：
 
 ```sh
 docker run -p 127.0.0.1:4000-4003:4000-4003 \
@@ -56,7 +63,7 @@ docker run -p 127.0.0.1:4000-4003:4000-4003 \
   --mysql-addr 0.0.0.0:4002 --postgres-addr 0.0.0.0:4003
 ```
 
-这个实例自带的控制台在 <http://localhost:4000/dashboard/>，不起 Grafana 也能看表和跑临时 SQL。
+两者都占 4000 端口，起一个就行。
 
 ## 配置
 
@@ -145,15 +152,11 @@ ORDER BY timestamp;
 
 有三样东西在任何模式下都不离开进程：工具私有的 `meta` 载荷、失败 turn 的内部 `error.message`，以及请求失败时的异常消息和堆栈。
 
-投影层是正向白名单，插件不认识的事件类型——包括未来某个 DSH 插件声明的——只导出身份标识。
+投影层是正向白名单。插件不认识的事件类型只导出身份标识，未来某个 DSH 插件声明的新类型也一样。
 
 ## Dashboard
 
-[`grafana/`](grafana/) 下有七个 Grafana dashboard，外加一个把 GreptimeDB 和 Grafana 一起拉起来的 compose 栈。
-
-```sh
-cd grafana && docker compose up -d && open http://localhost:3000
-```
+[`grafana/`](grafana/) 下有七个 Grafana dashboard，[安装](#安装)里的 compose 栈会把它们全部配好。
 
 ![Overview](https://raw.githubusercontent.com/tma1-ai/dsh-otel/main/grafana/screenshots/overview.png)
 
@@ -173,9 +176,9 @@ cd grafana && docker compose up -d && open http://localhost:3000
 
 Cost 用 dashboard 自己的四个变量给 token 计价，按每百万 token 计：未命中缓存的输入、缓存读、缓存写、输出。默认值是 DeepSeek 公布的 `deepseek-v4-flash` 高峰价（人民币）：`3.0`、`0.10`、`3.0`、`9.0`。同一组费率的美元值是 `0.44`、`0.014`、`0.44`、`1.32`。
 
-Currency 只切换各面板的货币符号，不换算费率，所以切过去要顺手把四个数字改掉。它的取值是 Grafana 的单位串——`currencyUSD` 和 `prefix:¥`——要加别的货币就在这个变量上多一个选项。
+Currency 只切换各面板的货币符号，不换算费率，所以切过去要顺手把四个数字改掉。它的取值是 Grafana 的单位串，`currencyUSD` 和 `prefix:¥`；要加别的货币，就在这个变量上多加一个选项。
 
-一套费率作用于选中的全部模型，所以同时跑不同价位的模型时，请用 Model 过滤器逐个看。它是估算——不知道你的合同价，也不知道 provider 的时段折扣。
+一套费率作用于选中的全部模型，所以同时跑不同价位的模型时，用 Model 过滤器逐个看。算出来是估算，你的合同价和 provider 的时段折扣它都不知道。
 
 每个表格都能继续下钻：trace id 打开该 turn 的 waterfall，session id 在 trace 和 log 视图之间跳转。每个 panel 的查询都由 `node grafana/verify.mjs` 对着真实数据库验证过。数据源的分工见 [grafana/README.md](grafana/README.md)，这些查询需要的索引见 [grafana/indexes.sql](grafana/indexes.sql)。
 
