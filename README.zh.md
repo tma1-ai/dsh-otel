@@ -13,16 +13,16 @@
 
 ```sql
 -- 最慢的工具调用，以及是哪个模型发起的。
-SELECT tool.span_name,
-       chat."span_attributes.gen_ai.request.model" AS model,
-       tool.duration_nano / 1000000 AS ms
-FROM opentelemetry_traces AS tool
-JOIN opentelemetry_traces AS chat
-  ON  chat.trace_id = tool.trace_id
-  AND chat."span_attributes.dsh.step" = tool."span_attributes.dsh.step"
-  AND chat.span_name LIKE 'chat%'
-WHERE tool.span_name LIKE 'execute_tool%'
-ORDER BY tool.duration_nano DESC
+SELECT span_name, model, duration_nano / 1000000 AS ms
+FROM (
+  SELECT span_name, duration_nano,
+         MAX("span_attributes.gen_ai.request.model")
+           OVER (PARTITION BY trace_id, "span_attributes.dsh.step") AS model
+  FROM opentelemetry_traces
+  WHERE "span_attributes.dsh.step" IS NOT NULL
+)
+WHERE span_name LIKE 'execute_tool%'
+ORDER BY duration_nano DESC
 LIMIT 10;
 ```
 
@@ -149,7 +149,7 @@ ORDER BY timestamp;
 
 ## Dashboard
 
-[`grafana/`](grafana/) 下有五个 Grafana dashboard，外加一个把 GreptimeDB 和 Grafana 一起拉起来的 compose 栈。
+[`grafana/`](grafana/) 下有七个 Grafana dashboard，外加一个把 GreptimeDB 和 Grafana 一起拉起来的 compose 栈。
 
 ```sh
 cd grafana && docker compose up -d && open http://localhost:3000
@@ -157,15 +157,25 @@ cd grafana && docker compose up -d && open http://localhost:3000
 
 ![Overview](https://raw.githubusercontent.com/tma1-ai/dsh-otel/main/grafana/screenshots/overview.png)
 
+![Cost](https://raw.githubusercontent.com/tma1-ai/dsh-otel/main/grafana/screenshots/cost.png)
+
 ![Trace explorer](https://raw.githubusercontent.com/tma1-ai/dsh-otel/main/grafana/screenshots/trace-explorer.png)
 
 | Dashboard | 回答什么问题 |
 |---|---|
-| Overview | 花了多少钱、多快、多少来自缓存 |
-| Agent loop | 哪些工具在跑、失败率多少、一个 turn 用了几次模型调用 |
+| Overview | 用了多少 token、多快、多少来自缓存 |
+| Cost | 花了多少钱、钱花在哪一档、账单为什么在涨 |
+| Sessions | 一次对话跑了多久、用了几个 turn、在哪里失败 |
+| Agent loop | 哪些工具在跑、失败率多少、一个 turn 用了几次模型调用、时间花在哪 |
 | Trace explorer | 某一个 turn 内部到底发生了什么，逐 span 看 |
 | Log explorer | 全部 session 事件，可按 session、类型和全文检索过滤 |
 | Metrics | 同样的活动，通过 PromQL 读取，用于更长保留期和不受采样影响的分位数 |
+
+Cost 用 dashboard 自己的四个变量给 token 计价，按每百万 token 计：未命中缓存的输入、缓存读、缓存写、输出。默认值是 DeepSeek 公布的 `deepseek-v4-flash` 高峰价（人民币）：`3.0`、`0.10`、`3.0`、`9.0`。同一组费率的美元值是 `0.44`、`0.014`、`0.44`、`1.32`。
+
+Currency 只切换各面板的货币符号，不换算费率，所以切过去要顺手把四个数字改掉。它的取值是 Grafana 的单位串——`currencyUSD` 和 `prefix:¥`——要加别的货币就在这个变量上多一个选项。
+
+一套费率作用于选中的全部模型，所以同时跑不同价位的模型时，请用 Model 过滤器逐个看。它是估算——不知道你的合同价，也不知道 provider 的时段折扣。
 
 每个表格都能继续下钻：trace id 打开该 turn 的 waterfall，session id 在 trace 和 log 视图之间跳转。每个 panel 的查询都由 `node grafana/verify.mjs` 对着真实数据库验证过。数据源的分工见 [grafana/README.md](grafana/README.md)，这些查询需要的索引见 [grafana/indexes.sql](grafana/indexes.sql)。
 

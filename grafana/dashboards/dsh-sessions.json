@@ -1,0 +1,699 @@
+{
+  "uid": "dsh-sessions",
+  "title": "DSH \u00b7 Sessions",
+  "description": "A session is one DSH conversation. This is the shape of yours: how many turns they took, how long the agent was busy, what it called, and where the failures sit. Pick a session to see its turns.",
+  "tags": [
+    "dsh",
+    "greptimedb",
+    "genai"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "30s",
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "session",
+        "label": "Session",
+        "type": "query",
+        "datasource": {
+          "type": "mysql",
+          "uid": "greptimedb"
+        },
+        "query": "SELECT DISTINCT `span_attributes.dsh.session.id` FROM opentelemetry_traces WHERE `span_attributes.dsh.session.id` IS NOT NULL ORDER BY 1 DESC LIMIT 200",
+        "refresh": 2,
+        "includeAll": true,
+        "multi": false,
+        "current": {
+          "text": "All",
+          "value": "%"
+        },
+        "allValue": "%"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "row",
+      "title": "Sessions",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "stat",
+      "title": "Sessions",
+      "datasource": {
+        "type": "mysql",
+        "uid": "greptimedb"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "datasource": {
+            "type": "mysql",
+            "uid": "greptimedb"
+          },
+          "rawSql": "SELECT COUNT(DISTINCT `span_attributes.dsh.session.id`) AS sessions FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND `span_attributes.dsh.session.id` LIKE '$session'"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Turns per session",
+      "description": "How much work a conversation takes before it is done.",
+      "datasource": {
+        "type": "mysql",
+        "uid": "greptimedb"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 1,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "datasource": {
+            "type": "mysql",
+            "uid": "greptimedb"
+          },
+          "rawSql": "SELECT ROUND(COUNT(DISTINCT trace_id) * 1.0 / NULLIF(COUNT(DISTINCT `span_attributes.dsh.session.id`), 0), 1) AS turns_per_session FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND `span_attributes.dsh.session.id` LIKE '$session'"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Agent busy time per session",
+      "description": "Turn spans summed, so it counts the time the agent was working and not the time you spent reading its answer.",
+      "datasource": {
+        "type": "mysql",
+        "uid": "greptimedb"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 1,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "datasource": {
+            "type": "mysql",
+            "uid": "greptimedb"
+          },
+          "rawSql": "SELECT ROUND(SUM(CASE WHEN span_name = 'invoke_agent dsh' THEN duration_nano ELSE 0 END) / 1000000000.0 / NULLIF(COUNT(DISTINCT `span_attributes.dsh.session.id`), 0), 1) AS busy_s FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND `span_attributes.dsh.session.id` LIKE '$session'"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Tool calls per turn",
+      "datasource": {
+        "type": "mysql",
+        "uid": "greptimedb"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 2,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "datasource": {
+            "type": "mysql",
+            "uid": "greptimedb"
+          },
+          "rawSql": "SELECT ROUND(SUM(CASE WHEN `span_attributes.gen_ai.tool.name` IS NOT NULL THEN 1 ELSE 0 END) * 1.0 / NULLIF(COUNT(DISTINCT trace_id), 0), 2) AS tools_per_turn FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND `span_attributes.dsh.session.id` LIKE '$session'"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "All sessions",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 5
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "table",
+      "title": "Sessions",
+      "description": "One row per session, newest first. Click a session id to read its events or open its turns.",
+      "datasource": {
+        "type": "mysql",
+        "uid": "greptimedb"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "busy_s"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "tool_errors"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "text",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 1
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "failed_turns"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "text",
+                      "value": null
+                    },
+                    {
+                      "color": "red",
+                      "value": 1
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "session"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Read this session's events",
+                    "url": "/d/dsh-logs/a?var-session=${__value.raw}&var-event_type=%25&var-search=&${__url_time_range}",
+                    "targetBlank": false
+                  },
+                  {
+                    "title": "Open this session's turns in the trace explorer",
+                    "url": "/d/dsh-traces/a?var-trace_id=&var-session=${__value.raw}&var-outcome=all&${__url_time_range}",
+                    "targetBlank": false
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "footer": {
+          "show": false
+        },
+        "cellHeight": "sm",
+        "sortBy": [
+          {
+            "displayName": "last_seen",
+            "desc": true
+          }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "datasource": {
+            "type": "mysql",
+            "uid": "greptimedb"
+          },
+          "rawSql": "SELECT `span_attributes.dsh.session.id` AS session, COUNT(DISTINCT trace_id) AS turns, SUM(CASE WHEN `span_attributes.gen_ai.system` IS NOT NULL THEN 1 ELSE 0 END) AS model_calls, SUM(CASE WHEN `span_attributes.gen_ai.tool.name` IS NOT NULL THEN 1 ELSE 0 END) AS tool_calls, SUM(CASE WHEN `span_attributes.dsh.tool.outcome` = 'error' THEN 1 ELSE 0 END) AS tool_errors, SUM(CASE WHEN `span_attributes.dsh.turn.end_reason` = 'error' THEN 1 ELSE 0 END) AS failed_turns, SUM(COALESCE(`span_attributes.gen_ai.usage.input_tokens`, 0) + COALESCE(`span_attributes.gen_ai.usage.output_tokens`, 0)) AS billed_tokens, ROUND(SUM(CASE WHEN span_name = 'invoke_agent dsh' THEN duration_nano ELSE 0 END) / 1000000000.0, 1) AS busy_s, MAX(timestamp) AS last_seen FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND `span_attributes.dsh.session.id` LIKE '$session' GROUP BY session ORDER BY last_seen DESC LIMIT 100"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Inside a session",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 16
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "table",
+      "title": "Turns in this session",
+      "description": "Every turn the selected session took, with its wall time split into model calls and tool executions. The two are summed span durations, so a turn that ran tools in parallel shows more tool time than wall time.",
+      "datasource": {
+        "type": "mysql",
+        "uid": "greptimedb"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 17,
+        "x": 0,
+        "y": 17
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": ".*_s$"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "reason"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "error": {
+                        "color": "red",
+                        "index": 0
+                      },
+                      "completed": {
+                        "color": "green",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "trace_id"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "turn"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open this turn in the trace explorer",
+                    "url": "/d/dsh-traces/a?var-trace_id=${__data.fields.trace_id}&var-session=%25&var-outcome=all&${__url_time_range}",
+                    "targetBlank": false
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "started"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 160
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "reason"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 110
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "turn"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 80
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "total_s"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 95
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "model_s"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 95
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "tool_s"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 95
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "steps"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 75
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "tools"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 75
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "footer": {
+          "show": false
+        },
+        "cellHeight": "sm",
+        "sortBy": [
+          {
+            "displayName": "started",
+            "desc": true
+          }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "datasource": {
+            "type": "mysql",
+            "uid": "greptimedb"
+          },
+          "rawSql": "SELECT started, turn, reason, ROUND(turn_ns / 1000000000.0, 2) AS total_s, ROUND(chat_ns / 1000000000.0, 2) AS model_s, ROUND(tool_ns / 1000000000.0, 2) AS tool_s, steps, tools, trace_id FROM (SELECT trace_id, MIN(timestamp) AS started, MAX(`span_attributes.dsh.turn`) AS turn, MAX(CASE WHEN span_name = 'invoke_agent dsh' THEN `span_attributes.dsh.turn.end_reason` END) AS reason, MAX(CASE WHEN span_name = 'invoke_agent dsh' THEN duration_nano END) AS turn_ns, SUM(CASE WHEN `span_attributes.gen_ai.system` IS NOT NULL THEN duration_nano ELSE 0 END) AS chat_ns, SUM(CASE WHEN `span_attributes.gen_ai.tool.name` IS NOT NULL THEN duration_nano ELSE 0 END) AS tool_ns, SUM(CASE WHEN `span_attributes.gen_ai.system` IS NOT NULL THEN 1 ELSE 0 END) AS steps, SUM(CASE WHEN `span_attributes.gen_ai.tool.name` IS NOT NULL THEN 1 ELSE 0 END) AS tools FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND `span_attributes.dsh.session.id` LIKE '$session' GROUP BY trace_id) ORDER BY started DESC LIMIT 100"
+        }
+      ]
+    },
+    {
+      "type": "barchart",
+      "title": "Tools in this session",
+      "datasource": {
+        "type": "mysql",
+        "uid": "greptimedb"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 7,
+        "x": 17,
+        "y": 17
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 80,
+            "lineWidth": 0
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "errors"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "xField": "tool",
+        "stacking": "normal",
+        "orientation": "horizontal",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "datasource": {
+            "type": "mysql",
+            "uid": "greptimedb"
+          },
+          "rawSql": "SELECT `span_attributes.gen_ai.tool.name` AS tool, SUM(CASE WHEN `span_attributes.dsh.tool.outcome` = 'error' THEN 0 ELSE 1 END) AS ok, SUM(CASE WHEN `span_attributes.dsh.tool.outcome` = 'error' THEN 1 ELSE 0 END) AS errors FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND `span_attributes.gen_ai.tool.name` IS NOT NULL AND `span_attributes.dsh.session.id` LIKE '$session' GROUP BY tool ORDER BY ok + errors DESC"
+        }
+      ]
+    }
+  ]
+}
