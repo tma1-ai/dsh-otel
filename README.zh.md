@@ -26,35 +26,37 @@ ORDER BY duration_nano DESC
 LIMIT 10;
 ```
 
-## 安装
+![Overview](https://raw.githubusercontent.com/tma1-ai/dsh-otel/main/grafana/screenshots/overview.png)
 
-```sh
-dsh plugin --profile headless add @tma1-ai/dsh-plugin-greptimedb
-```
+## 快速开始
 
-包自带 bundle patch，这一条命令就把它接进 profile。`dsh plugin` 会转发给 PATH 上的 `pnpm`，而 dsh 的 profile 目录本身就是一个 pnpm workspace root。pnpm 9 会拒绝在那里安装，也会忽略 dsh 写下的 linker 设置，所以用 pnpm 10 或更高版本。要指向自己的数据库，在 `$DSH_HOME/profiles/<name>/cordis.patch.yml` 里覆盖这一行：
+需要 pnpm 10 或更高版本。`dsh plugin` 会转发给 PATH 上的 `pnpm`，而 dsh 的 profile 目录本身就是一个 pnpm workspace root，pnpm 9 会拒绝在那里安装，也会忽略 dsh 写下的 linker 设置。
 
-```yaml
-- id: greptimedb-otel
-  name: '@tma1-ai/dsh-plugin-greptimedb'
-  config:
-    endpoint: https://<host>/v1/otlp
-    database: <dbname>
-    username: <user>
-    password: <password>
-```
-
-profile patch 是整体替换目标行的 `config`，不是深合并，所以要保留的字段必须全部重述。
-
-默认配置直接指向本地 GreptimeDB。[`grafana/`](grafana/) 下的 compose 栈会连同 Grafana 和七个配好的 [dashboard](#dashboard) 一起拉起来。Grafana 的 provisioning 要从磁盘读这些 dashboard，所以取这一个目录就行，不用 clone 整个仓库：
+**启动数据库和 Grafana。**[`grafana/`](grafana/) 下的 compose 栈会启动 GreptimeDB，并配好七个 [dashboard](#dashboard)。Grafana 的 provisioning 要从磁盘读这些 dashboard，因此只需获取该目录，无需 clone 整个仓库：
 
 ```sh
 curl -fsSL https://github.com/tma1-ai/dsh-otel/archive/main.tar.gz \
   | tar -xz --strip-components=1 dsh-otel-main/grafana
-cd grafana && docker compose up -d && open http://localhost:3000
+cd grafana && docker compose up -d
 ```
 
-只要数据库的话，GreptimeDB 自带的控制台在 <http://localhost:4000/dashboard/>，看表和跑临时 SQL 够用：
+**安装插件。**默认配置已指向上述数据库，无需额外配置：
+
+```sh
+dsh plugin --profile web add @tma1-ai/dsh-plugin-greptimedb
+```
+
+包自带 bundle patch，这一条命令就把它接进 profile。
+
+**运行并查看数据。**trace 和 log 在 `scheduledDelayMillis`（默认 5 秒）内写入，metric 在下一个采集周期（默认 30 秒）写入。DSH 空闲时不产生数据，需先执行一次任务：
+
+```sh
+dsh web
+```
+
+Grafana 地址为 <http://localhost:3000>，已启用匿名 admin 访问，无需登录。建议从 Overview 开始。
+
+如果只需要数据库，GreptimeDB 自带的控制台在 <http://localhost:4000/dashboard/>，看表和跑临时 SQL 够用：
 
 ```sh
 docker run -p 127.0.0.1:4000-4003:4000-4003 \
@@ -67,6 +69,20 @@ docker run -p 127.0.0.1:4000-4003:4000-4003 \
 两者都占 4000 端口，起一个就行。
 
 ## 配置
+
+要指向自己的数据库，在 `$DSH_HOME/profiles/<name>/cordis.patch.yml` 里覆盖这一行：
+
+```yaml
+- id: greptimedb-otel
+  name: '@tma1-ai/dsh-plugin-greptimedb'
+  config:
+    endpoint: https://<host>/v1/otlp
+    database: <dbname>
+    username: <user>
+    password: <password>
+```
+
+profile patch 是整体替换目标行的 `config`，不是深合并，所以要保留的字段必须全部重述。
 
 | 键 | 默认值 | 说明 |
 |---|---|---|
@@ -123,8 +139,10 @@ gen_ai.usage.output_tokens = outputTokens          （已含 reasoning tokens）
 | 指标 | 类型 | 维度 |
 |---|---|---|
 | `gen_ai.client.token.usage` | Histogram | `gen_ai.token.type`（只有 `input`/`output`）、model、provider |
-| `gen_ai.client.operation.duration` | Histogram | `gen_ai.operation.name`、model |
-| `dsh.token.detail` | Histogram | `dsh.token.detail_kind`（`cache_read`/`cache_write`/`reasoning`） |
+| `gen_ai.client.operation.duration` | Histogram | `gen_ai.operation.name`、model、provider |
+| `gen_ai.invoke_agent.duration` | Histogram | `gen_ai.operation.name` |
+| `gen_ai.execute_tool.duration` | Histogram | `gen_ai.operation.name`、`gen_ai.tool.name` |
+| `dsh.token.detail` | Histogram | `dsh.token.detail_kind`（`cache_read`/`cache_write`/`reasoning`）、model、provider |
 | `dsh.tool.invocations` | Counter | `gen_ai.tool.name`、`dsh.tool.outcome` |
 | `dsh.turns` / `dsh.steps` | Counter | |
 
@@ -157,9 +175,7 @@ ORDER BY timestamp;
 
 ## Dashboard
 
-[`grafana/`](grafana/) 下有七个 Grafana dashboard，[安装](#安装)里的 compose 栈会把它们全部配好。
-
-![Overview](https://raw.githubusercontent.com/tma1-ai/dsh-otel/main/grafana/screenshots/overview.png)
+[`grafana/`](grafana/) 下有七个 Grafana dashboard，[快速开始](#快速开始)里的 compose 栈会把它们全部配好。
 
 ![Cost](https://raw.githubusercontent.com/tma1-ai/dsh-otel/main/grafana/screenshots/cost.png)
 
@@ -203,7 +219,8 @@ GREPTIMEDB_OTLP_ENDPOINT=http://localhost:4000/v1/otlp pnpm test   # 追加真�
 
 ## 已知限制
 
-- **DSH 处于 pre-release**，首个正式版本前会自由重命名和重组包结构。插件只用它的类型，所以不声明 peer 版本：DSH 每个版本都是预发布版，而 semver 不匹配 range 里没写明的预发布版，锁哪个 range 都会在下一个 `-rc` 上失效。代价是 DSH 改了名字，装的时候不报错，要等 CI 跑到才知道；CI 跑的是 `0.1.1-rc.2`。`.d.ts` 里还留着这些类型的 import，在没有 DSH 的环境里做类型检查，要开 `skipLibCheck`，或者把 DSH 那几个包一起装上。
+- **DSH 处于 pre-release**，首个正式版本前会自由重命名和重组包结构。插件只用它的类型，所以不声明 peer 版本：DSH 每个版本都是预发布版，而 semver 不匹配 range 里没写明的预发布版，锁哪个 range 都会在下一个 `-rc` 上失效。代价是 DSH 的重命名不会在安装时暴露，只能由 CI 发现；CI 运行的版本是 `0.1.1-rc.2`。
+- **发布出去的 `.d.ts` 会 import DSH 的类型。** 在没有 DSH 的环境中对本包做类型检查，需启用 `skipLibCheck`，或同时安装对应的 DSH 包。
 - **GenAI 语义规范仍是 experimental。** 名字取自 `@opentelemetry/semantic-conventions/incubating`，会随它变动。span 同时带 `gen_ai.provider.name` 和已废弃的 `gen_ai.system`。
 - **`ttl` 覆盖不到 metric 表。** metric 走 metric engine，保留期是 physical table 的属性。hint 只到得了逻辑表，逻辑表会存下并显示它，但不会执行（[greptimedb#8951](https://github.com/GreptimeTeam/greptimedb/issues/8951)）。请自行 `ALTER TABLE greptime_physical_table SET 'ttl' = '180d'`。
 - **不做逐 turn flush。** 导出遵循 batch processor 自身节奏。

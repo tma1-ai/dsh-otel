@@ -26,33 +26,35 @@ ORDER BY duration_nano DESC
 LIMIT 10;
 ```
 
-## Install
+![Overview](https://raw.githubusercontent.com/tma1-ai/dsh-otel/main/grafana/screenshots/overview.png)
 
-```sh
-dsh plugin --profile headless add @tma1-ai/dsh-plugin-greptimedb
-```
+## Quick start
 
-The package ships a bundle patch, so that one command wires it into the profile. `dsh plugin` forwards to whichever `pnpm` is on your PATH, and a dsh profile directory is its own pnpm workspace root. pnpm 9 refuses to install there and ignores the linker settings dsh writes, so use pnpm 10 or newer. To point it at your own database, override the row in `$DSH_HOME/profiles/<name>/cordis.patch.yml`:
+Requires pnpm 10 or newer. `dsh plugin` forwards to whichever `pnpm` is on your PATH, and a dsh profile directory is its own pnpm workspace root. pnpm 9 refuses to install there and ignores the linker settings dsh writes.
 
-```yaml
-- id: greptimedb-otel
-  name: '@tma1-ai/dsh-plugin-greptimedb'
-  config:
-    endpoint: https://<host>/v1/otlp
-    database: <dbname>
-    username: <user>
-    password: <password>
-```
-
-A profile patch replaces the row's whole `config` instead of merging into it, so restate every field you want to keep.
-
-The defaults already point at a local GreptimeDB. The compose stack under [`grafana/`](grafana/) starts one with Grafana and the seven [dashboards](#dashboards) already provisioned. Grafana reads those dashboards off disk, so fetch that one directory instead of cloning the repository:
+**Start the database and Grafana.** The compose stack under [`grafana/`](grafana/) brings up GreptimeDB with the seven [dashboards](#dashboards) provisioned. Grafana reads those dashboards off disk, so fetch that one directory instead of cloning the repository:
 
 ```sh
 curl -fsSL https://github.com/tma1-ai/dsh-otel/archive/main.tar.gz \
   | tar -xz --strip-components=1 dsh-otel-main/grafana
-cd grafana && docker compose up -d && open http://localhost:3000
+cd grafana && docker compose up -d
 ```
+
+**Install the plugin.** Its defaults point at the database started above, so no configuration is required:
+
+```sh
+dsh plugin --profile web add @tma1-ai/dsh-plugin-greptimedb
+```
+
+The package ships a bundle patch, so that one command wires it into the profile.
+
+**Run DSH and check the data.** Traces and logs are written within `scheduledDelayMillis`, 5 seconds by default; metrics on the next collection period, 30 seconds by default. DSH produces no data while idle, so run a task first:
+
+```sh
+dsh web
+```
+
+Grafana is at <http://localhost:3000>, with anonymous admin access enabled and no login required. Start with the Overview dashboard.
 
 For the database alone, GreptimeDB's own console at <http://localhost:4000/dashboard/> is enough to check the tables and run ad-hoc SQL:
 
@@ -67,6 +69,20 @@ docker run -p 127.0.0.1:4000-4003:4000-4003 \
 Both bind port 4000, so run one or the other.
 
 ## Configuration
+
+To point the plugin at your own database, override the row in `$DSH_HOME/profiles/<name>/cordis.patch.yml`:
+
+```yaml
+- id: greptimedb-otel
+  name: '@tma1-ai/dsh-plugin-greptimedb'
+  config:
+    endpoint: https://<host>/v1/otlp
+    database: <dbname>
+    username: <user>
+    password: <password>
+```
+
+A profile patch replaces the row's whole `config` instead of merging into it, so restate every field you want to keep.
 
 | Key | Default | Notes |
 |---|---|---|
@@ -123,8 +139,10 @@ The breakdown stays queryable as `dsh.usage.uncached_input_tokens`, `dsh.usage.c
 | Instrument | Type | Dimensions |
 |---|---|---|
 | `gen_ai.client.token.usage` | Histogram | `gen_ai.token.type` (`input`/`output` only), model, provider |
-| `gen_ai.client.operation.duration` | Histogram | `gen_ai.operation.name`, model |
-| `dsh.token.detail` | Histogram | `dsh.token.detail_kind` (`cache_read`/`cache_write`/`reasoning`) |
+| `gen_ai.client.operation.duration` | Histogram | `gen_ai.operation.name`, model, provider |
+| `gen_ai.invoke_agent.duration` | Histogram | `gen_ai.operation.name` |
+| `gen_ai.execute_tool.duration` | Histogram | `gen_ai.operation.name`, `gen_ai.tool.name` |
+| `dsh.token.detail` | Histogram | `dsh.token.detail_kind` (`cache_read`/`cache_write`/`reasoning`), model, provider |
 | `dsh.tool.invocations` | Counter | `gen_ai.tool.name`, `dsh.tool.outcome` |
 | `dsh.turns` / `dsh.steps` | Counter | |
 
@@ -157,9 +175,7 @@ The projection is a positive allowlist, so an event type the plugin does not kno
 
 ## Dashboards
 
-Seven Grafana dashboards ship in [`grafana/`](grafana/). The compose stack in [Install](#install) provisions all of them.
-
-![Overview](https://raw.githubusercontent.com/tma1-ai/dsh-otel/main/grafana/screenshots/overview.png)
+Seven Grafana dashboards ship in [`grafana/`](grafana/). The compose stack in [Quick start](#quick-start) provisions all of them.
 
 ![Cost](https://raw.githubusercontent.com/tma1-ai/dsh-otel/main/grafana/screenshots/cost.png)
 
@@ -203,7 +219,8 @@ GREPTIMEDB_OTLP_ENDPOINT=http://localhost:4000/v1/otlp pnpm test   # adds the li
 
 ## Known limitations
 
-- **DSH is pre-release** and renames and repackages freely before its first tagged release. The plugin uses the DSH packages for types only and declares no peer range on them, because every DSH version is a prerelease and semver matches no prerelease a range does not name outright. Any range pinned here would fail on the next `-rc`. The cost is that a rename in DSH does not fail the install; it fails CI, which runs against `0.1.1-rc.2`. The published `.d.ts` still imports those types, so type-checking this package outside a DSH install needs `skipLibCheck` on, or the DSH packages installed alongside it.
+- **DSH is pre-release** and renames and repackages freely before its first tagged release. The plugin uses the DSH packages for types only and declares no peer range on them, because every DSH version is a prerelease and semver matches no prerelease a range does not name outright. Any range pinned here would fail on the next `-rc`. The cost is that a rename in DSH does not fail the install; it fails CI, which runs against `0.1.1-rc.2`.
+- **The published `.d.ts` imports DSH types.** Type-checking this package outside a DSH install needs `skipLibCheck` on, or the DSH packages installed alongside it.
 - **The GenAI conventions are experimental.** Names come from `@opentelemetry/semantic-conventions/incubating` and move with it. Spans carry both `gen_ai.provider.name` and the deprecated `gen_ai.system`.
 - **`ttl` does not reach metric tables.** Metrics land on the metric engine, where retention is a property of the physical table. The hint reaches the logical table, which stores and displays it but never enforces it ([greptimedb#8951](https://github.com/GreptimeTeam/greptimedb/issues/8951)). Set it yourself with `ALTER TABLE greptime_physical_table SET 'ttl' = '180d'`.
 - **No per-turn flush.** Export follows the batch processors' cadence.
