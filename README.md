@@ -7,9 +7,9 @@
 
 English | [中文](README.zh.md)
 
-See what your [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) agent spends — tokens, money, and time — per turn, per model call, per tool.
+What a [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) run costs you in tokens, money, and time, written into [GreptimeDB](https://github.com/GreptimeTeam/greptimedb) as OpenTelemetry traces, metrics, and logs.
 
-The plugin exports OpenTelemetry traces, metrics, and logs into [GreptimeDB](https://github.com/GreptimeTeam/greptimedb), and ships seven Grafana dashboards that read them. No collector. No sidecar. No fork of DSH. It installs as an ordinary plugin, and every turn, model call, and tool execution becomes a row you can query:
+Seven Grafana dashboards read it back. No collector. No sidecar. No fork of DSH. It installs as an ordinary plugin, and every turn, model call, and tool execution becomes a row you can query:
 
 ```sql
 -- Slowest tool calls, with the model that requested them.
@@ -46,7 +46,7 @@ The package ships a bundle patch, so that one command wires it into the profile.
 
 A profile patch replaces the row's whole `config` instead of merging into it, so restate every field you want to keep.
 
-The defaults already point at a local GreptimeDB. The compose stack under [`grafana/`](grafana/) starts one with Grafana and the seven [dashboards](#dashboards) already provisioned. Grafana reads those dashboards off disk, so fetch that one directory — no clone, no git:
+The defaults already point at a local GreptimeDB. The compose stack under [`grafana/`](grafana/) starts one with Grafana and the seven [dashboards](#dashboards) already provisioned. Grafana reads those dashboards off disk, so fetch that one directory instead of cloning the repository:
 
 ```sh
 curl -fsSL https://github.com/tma1-ai/dsh-otel/archive/main.tar.gz \
@@ -203,7 +203,7 @@ GREPTIMEDB_OTLP_ENDPOINT=http://localhost:4000/v1/otlp pnpm test   # adds the li
 
 ## Known limitations
 
-- **DSH is pre-release** and renames and repackages freely before its first tagged release. The plugin uses the DSH packages for types only, so it declares no peer range on them: every DSH version is a prerelease, and semver matches no prerelease a range does not name outright, so any range would break on the next `-rc`. CI runs against `0.1.1-rc.2`, and that is where a rename gets caught — not at install time.
+- **DSH is pre-release** and renames and repackages freely before its first tagged release. The plugin uses the DSH packages for types only and declares no peer range on them, because every DSH version is a prerelease and semver matches no prerelease a range does not name outright. Any range pinned here would fail on the next `-rc`. CI runs against `0.1.1-rc.2`, which is where a rename gets caught rather than at install time.
 - **The GenAI conventions are experimental.** Names come from `@opentelemetry/semantic-conventions/incubating` and move with it. Spans carry both `gen_ai.provider.name` and the deprecated `gen_ai.system`.
 - **`ttl` does not reach metric tables.** Metrics land on the metric engine, where retention is a property of the physical table. The hint reaches the logical table, which stores and displays it but never enforces it ([greptimedb#8951](https://github.com/GreptimeTeam/greptimedb/issues/8951)). Set it yourself with `ALTER TABLE greptime_physical_table SET 'ttl' = '180d'`.
 - **No per-turn flush.** Export follows the batch processors' cadence.
