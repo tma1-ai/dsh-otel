@@ -91,13 +91,13 @@ for (const file of readdirSync(dashboardDir).filter(name => name.endsWith('.json
     for (const target of panel.targets ?? []) {
       if (target.rawSql === undefined && target.expr === undefined) continue
       checked += 1
-      // The IN ($model) form needs a real value list; "All" means no filter, so
-      // the check runs the unfiltered query the panel produces in that state.
+      // "All" expands to every value in the browser. `IS NOT NULL` is the same
+      // row set here, wherever the panel puts the filter.
       const withoutFilter = target.rawSql !== undefined && target.rawSql.includes('IN ($model)')
       // A target may omit its datasource and inherit the panel's.
       const datasource = target.datasource ?? panel.datasource
       const result = await runTarget(
-        withoutFilter ? { ...target, rawSql: target.rawSql.replaceAll('AND `span_attributes.gen_ai.request.model` IN ($model)', '') } : target,
+        withoutFilter ? { ...target, rawSql: target.rawSql.replaceAll('IN ($model)', 'IS NOT NULL') } : target,
         datasource,
         variables,
       )

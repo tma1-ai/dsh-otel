@@ -13,16 +13,16 @@ No collector. No sidecar. No fork of DSH. It installs as an ordinary plugin, and
 
 ```sql
 -- Slowest tool calls, with the model that requested them.
-SELECT tool.span_name,
-       chat."span_attributes.gen_ai.request.model" AS model,
-       tool.duration_nano / 1000000 AS ms
-FROM opentelemetry_traces AS tool
-JOIN opentelemetry_traces AS chat
-  ON  chat.trace_id = tool.trace_id
-  AND chat."span_attributes.dsh.step" = tool."span_attributes.dsh.step"
-  AND chat.span_name LIKE 'chat%'
-WHERE tool.span_name LIKE 'execute_tool%'
-ORDER BY tool.duration_nano DESC
+SELECT span_name, model, duration_nano / 1000000 AS ms
+FROM (
+  SELECT span_name, duration_nano,
+         MAX("span_attributes.gen_ai.request.model")
+           OVER (PARTITION BY trace_id, "span_attributes.dsh.step") AS model
+  FROM opentelemetry_traces
+  WHERE "span_attributes.dsh.step" IS NOT NULL
+)
+WHERE span_name LIKE 'execute_tool%'
+ORDER BY duration_nano DESC
 LIMIT 10;
 ```
 
@@ -149,7 +149,7 @@ The projection is a positive allowlist, so an event type the plugin does not kno
 
 ## Dashboards
 
-Five Grafana dashboards ship in [`grafana/`](grafana/), along with a compose stack that brings up GreptimeDB and Grafana together.
+Seven Grafana dashboards ship in [`grafana/`](grafana/), along with a compose stack that brings up GreptimeDB and Grafana together.
 
 ```sh
 cd grafana && docker compose up -d && open http://localhost:3000
@@ -157,15 +157,25 @@ cd grafana && docker compose up -d && open http://localhost:3000
 
 ![Overview](https://raw.githubusercontent.com/tma1-ai/dsh-otel/main/grafana/screenshots/overview.png)
 
+![Cost](https://raw.githubusercontent.com/tma1-ai/dsh-otel/main/grafana/screenshots/cost.png)
+
 ![Trace explorer](https://raw.githubusercontent.com/tma1-ai/dsh-otel/main/grafana/screenshots/trace-explorer.png)
 
 | Dashboard | Answers |
 |---|---|
-| Overview | What did this cost, how fast was it, how much came from cache |
-| Agent loop | Which tools ran, how often they failed, how many model calls a turn needed |
+| Overview | How many tokens, how fast, how much came from cache |
+| Cost | What it cost in money, what the money bought, and why the bill grows |
+| Sessions | How long a conversation ran, how many turns it took, where it failed |
+| Agent loop | Which tools ran, how often they failed, how many model calls a turn needed, where a turn's time went |
 | Trace explorer | What happened inside one specific turn, span by span |
 | Log explorer | Every session event, filterable by session, type, and full-text search |
 | Metrics | The same activity through PromQL, for longer retention and sampling-proof percentiles |
+
+Cost prices the token counts with four rates you set in the dashboard's own variables, per million tokens: uncached input, cache read, cache write, output. The defaults are DeepSeek's published `deepseek-v4-flash` peak rates in CNY — `3.0`, `0.10`, `3.0`, `9.0`. The same rates in USD are `0.44`, `0.014`, `0.44`, `1.32`.
+
+The Currency picker changes the symbol every panel formats with, not the rates, so retype those when you switch. Its values are Grafana units — `currencyUSD` and `prefix:¥` — and another currency is one more option on that variable.
+
+One rate set applies to every selected model, so pick a single model when you run several at different prices. It is an estimate — it knows nothing about your contract or a provider's time-of-day discount.
 
 Every table links onward: a trace id opens that turn's waterfall, a session id jumps between the trace and log views. Every panel query is checked against a live database by `node grafana/verify.mjs`. See [grafana/README.md](grafana/README.md) for the datasource split and [grafana/indexes.sql](grafana/indexes.sql) for the indexes these queries want.
 

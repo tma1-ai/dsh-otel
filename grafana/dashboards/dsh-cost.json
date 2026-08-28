@@ -1,0 +1,1158 @@
+{
+  "uid": "dsh-cost",
+  "title": "DSH \u00b7 Cost",
+  "description": "What the agent spent, and on what. Rates are dashboard variables per million tokens, in the currency picked above; the defaults are DeepSeek's published deepseek-v4-flash peak rates in CNY. Switching currency changes the symbol, not the rates \u2014 retype those too. One rate set applies to every selected model, so pick a single model when you run several at different prices.",
+  "tags": [
+    "dsh",
+    "greptimedb",
+    "genai",
+    "cost"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "30s",
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "model",
+        "label": "Model",
+        "type": "query",
+        "datasource": {
+          "type": "mysql",
+          "uid": "greptimedb"
+        },
+        "query": "SELECT DISTINCT `span_attributes.gen_ai.request.model` FROM opentelemetry_traces WHERE `span_attributes.gen_ai.request.model` IS NOT NULL",
+        "refresh": 1,
+        "includeAll": true,
+        "multi": true,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "currency",
+        "label": "Currency",
+        "type": "custom",
+        "description": "Only the symbol the numbers are formatted with. The rates below are read in whatever currency you type them in.",
+        "query": "USD ($) : currencyUSD, CNY (\u00a5) : prefix:\u00a5",
+        "includeAll": false,
+        "multi": false,
+        "current": {
+          "text": "CNY (\u00a5)",
+          "value": "prefix:\u00a5"
+        },
+        "options": [
+          {
+            "text": "USD ($)",
+            "value": "currencyUSD",
+            "selected": false
+          },
+          {
+            "text": "CNY (\u00a5)",
+            "value": "prefix:\u00a5",
+            "selected": true
+          }
+        ]
+      },
+      {
+        "name": "price_in",
+        "label": "Input /1M",
+        "description": "Uncached input, what the provider calls a cache miss. DeepSeek deepseek-v4-flash peak: 3.0 CNY, 0.44 USD.",
+        "type": "textbox",
+        "query": "3.0",
+        "current": {
+          "text": "3.0",
+          "value": "3.0"
+        },
+        "options": []
+      },
+      {
+        "name": "price_cache_read",
+        "label": "Cache read /1M",
+        "description": "Input served from the provider\u2019s cache. DeepSeek deepseek-v4-flash peak: 0.10 CNY, 0.014 USD.",
+        "type": "textbox",
+        "query": "0.10",
+        "current": {
+          "text": "0.10",
+          "value": "0.10"
+        },
+        "options": []
+      },
+      {
+        "name": "price_cache_write",
+        "label": "Cache write /1M",
+        "description": "DSH counts cache writes separately from input. DeepSeek publishes no write premium, so this defaults to the input rate; providers that charge one (Anthropic) want a higher number here.",
+        "type": "textbox",
+        "query": "3.0",
+        "current": {
+          "text": "3.0",
+          "value": "3.0"
+        },
+        "options": []
+      },
+      {
+        "name": "price_out",
+        "label": "Output /1M",
+        "description": "Reasoning tokens are already part of the output count, and are billed as output. DeepSeek deepseek-v4-flash peak: 9.0 CNY, 1.32 USD.",
+        "type": "textbox",
+        "query": "9.0",
+        "current": {
+          "text": "9.0",
+          "value": "9.0"
+        },
+        "options": []
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "row",
+      "title": "Spend",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "stat",
+      "title": "Estimated spend",
+      "description": "Token counts from the model calls, priced with the rates above. An estimate: it knows nothing about your contract, promotions, or a provider's time-of-day discount.",
+      "datasource": {
+        "type": "mysql",
+        "uid": "greptimedb"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 4,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "datasource": {
+            "type": "mysql",
+            "uid": "greptimedb"
+          },
+          "rawSql": "SELECT ROUND((SUM(COALESCE(`span_attributes.dsh.usage.uncached_input_tokens`, 0)) * $price_in + SUM(COALESCE(`span_attributes.dsh.usage.cache_read_tokens`, 0)) * $price_cache_read + SUM(COALESCE(`span_attributes.dsh.usage.cache_write_tokens`, 0)) * $price_cache_write + SUM(COALESCE(`span_attributes.gen_ai.usage.output_tokens`, 0)) * $price_out) / 1000000.0, 4) AS spend FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND `span_attributes.gen_ai.system` IS NOT NULL AND `span_attributes.dsh.session.id` IS NOT NULL AND `span_attributes.gen_ai.request.model` IN ($model)"
+        },
+        {
+          "refId": "B",
+          "format": "table",
+          "rawQuery": true,
+          "datasource": {
+            "type": "mysql",
+            "uid": "greptimedb"
+          },
+          "rawSql": "SELECT '$currency' AS unit"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "configFromData",
+          "options": {
+            "configRefId": "B",
+            "applyTo": {
+              "id": "byType",
+              "options": "number"
+            },
+            "mappings": [
+              {
+                "fieldName": "unit",
+                "handlerKey": "unit"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Per turn",
+      "description": "Spend divided by the turns that reached the model. This is the number to watch when you change a prompt, a tool set, or a compaction policy.",
+      "datasource": {
+        "type": "mysql",
+        "uid": "greptimedb"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 4,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "datasource": {
+            "type": "mysql",
+            "uid": "greptimedb"
+          },
+          "rawSql": "SELECT ROUND((SUM(COALESCE(`span_attributes.dsh.usage.uncached_input_tokens`, 0)) * $price_in + SUM(COALESCE(`span_attributes.dsh.usage.cache_read_tokens`, 0)) * $price_cache_read + SUM(COALESCE(`span_attributes.dsh.usage.cache_write_tokens`, 0)) * $price_cache_write + SUM(COALESCE(`span_attributes.gen_ai.usage.output_tokens`, 0)) * $price_out) / 1000000.0 / NULLIF(COUNT(DISTINCT trace_id), 0), 4) AS spend FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND `span_attributes.gen_ai.system` IS NOT NULL AND `span_attributes.dsh.session.id` IS NOT NULL AND `span_attributes.gen_ai.request.model` IN ($model)"
+        },
+        {
+          "refId": "B",
+          "format": "table",
+          "rawQuery": true,
+          "datasource": {
+            "type": "mysql",
+            "uid": "greptimedb"
+          },
+          "rawSql": "SELECT '$currency' AS unit"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "configFromData",
+          "options": {
+            "configRefId": "B",
+            "applyTo": {
+              "id": "byType",
+              "options": "number"
+            },
+            "mappings": [
+              {
+                "fieldName": "unit",
+                "handlerKey": "unit"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Per session",
+      "description": "Spend divided by the sessions seen in this window. A session is one DSH conversation, however many turns it took.",
+      "datasource": {
+        "type": "mysql",
+        "uid": "greptimedb"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 4,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "text"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "datasource": {
+            "type": "mysql",
+            "uid": "greptimedb"
+          },
+          "rawSql": "SELECT ROUND((SUM(COALESCE(`span_attributes.dsh.usage.uncached_input_tokens`, 0)) * $price_in + SUM(COALESCE(`span_attributes.dsh.usage.cache_read_tokens`, 0)) * $price_cache_read + SUM(COALESCE(`span_attributes.dsh.usage.cache_write_tokens`, 0)) * $price_cache_write + SUM(COALESCE(`span_attributes.gen_ai.usage.output_tokens`, 0)) * $price_out) / 1000000.0 / NULLIF(COUNT(DISTINCT `span_attributes.dsh.session.id`), 0), 4) AS spend FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND `span_attributes.gen_ai.system` IS NOT NULL AND `span_attributes.dsh.session.id` IS NOT NULL AND `span_attributes.gen_ai.request.model` IN ($model)"
+        },
+        {
+          "refId": "B",
+          "format": "table",
+          "rawQuery": true,
+          "datasource": {
+            "type": "mysql",
+            "uid": "greptimedb"
+          },
+          "rawSql": "SELECT '$currency' AS unit"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "configFromData",
+          "options": {
+            "configRefId": "B",
+            "applyTo": {
+              "id": "byType",
+              "options": "number"
+            },
+            "mappings": [
+              {
+                "fieldName": "unit",
+                "handlerKey": "unit"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Saved by cache",
+      "description": "What the cached input would have cost at the miss rate, minus what it did cost and what the provider charged to write the cache.",
+      "datasource": {
+        "type": "mysql",
+        "uid": "greptimedb"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 1
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 4,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value",
+        "graphMode": "none"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "datasource": {
+            "type": "mysql",
+            "uid": "greptimedb"
+          },
+          "rawSql": "SELECT ROUND((SUM(COALESCE(`span_attributes.dsh.usage.cache_read_tokens`, 0)) * ($price_in - $price_cache_read) + SUM(COALESCE(`span_attributes.dsh.usage.cache_write_tokens`, 0)) * ($price_in - $price_cache_write)) / 1000000.0, 4) AS spend FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND `span_attributes.gen_ai.system` IS NOT NULL AND `span_attributes.dsh.session.id` IS NOT NULL AND `span_attributes.gen_ai.request.model` IN ($model)"
+        },
+        {
+          "refId": "B",
+          "format": "table",
+          "rawQuery": true,
+          "datasource": {
+            "type": "mysql",
+            "uid": "greptimedb"
+          },
+          "rawSql": "SELECT '$currency' AS unit"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "configFromData",
+          "options": {
+            "configRefId": "B",
+            "applyTo": {
+              "id": "byType",
+              "options": "number"
+            },
+            "mappings": [
+              {
+                "fieldName": "unit",
+                "handlerKey": "unit"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Where the money goes",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 5
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Spend over time by model",
+      "datasource": {
+        "type": "mysql",
+        "uid": "greptimedb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 14,
+        "x": 0,
+        "y": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 4,
+          "custom": {
+            "fillOpacity": 20,
+            "lineWidth": 1,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawQuery": true,
+          "datasource": {
+            "type": "mysql",
+            "uid": "greptimedb"
+          },
+          "rawSql": "SELECT date_bin('5 minutes'::INTERVAL, timestamp) AS time, `span_attributes.gen_ai.request.model` AS model, ROUND((SUM(COALESCE(`span_attributes.dsh.usage.uncached_input_tokens`, 0)) * $price_in + SUM(COALESCE(`span_attributes.dsh.usage.cache_read_tokens`, 0)) * $price_cache_read + SUM(COALESCE(`span_attributes.dsh.usage.cache_write_tokens`, 0)) * $price_cache_write + SUM(COALESCE(`span_attributes.gen_ai.usage.output_tokens`, 0)) * $price_out) / 1000000.0, 6) AS spend FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND `span_attributes.gen_ai.system` IS NOT NULL AND `span_attributes.dsh.session.id` IS NOT NULL AND `span_attributes.gen_ai.request.model` IN ($model) GROUP BY time, model ORDER BY time"
+        },
+        {
+          "refId": "B",
+          "format": "table",
+          "rawQuery": true,
+          "datasource": {
+            "type": "mysql",
+            "uid": "greptimedb"
+          },
+          "rawSql": "SELECT '$currency' AS unit"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "configFromData",
+          "options": {
+            "configRefId": "B",
+            "applyTo": {
+              "id": "byType",
+              "options": "number"
+            },
+            "mappings": [
+              {
+                "fieldName": "unit",
+                "handlerKey": "unit"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "type": "piechart",
+      "title": "Spend by token class",
+      "description": "The four things you pay for. Output usually dominates until context grows; then uncached input takes over.",
+      "datasource": {
+        "type": "mysql",
+        "uid": "greptimedb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 10,
+        "x": 14,
+        "y": 6
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 4
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "pieType": "donut",
+        "legend": {
+          "displayMode": "list",
+          "placement": "right",
+          "showLegend": true
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "datasource": {
+            "type": "mysql",
+            "uid": "greptimedb"
+          },
+          "rawSql": "SELECT ROUND(SUM(COALESCE(`span_attributes.dsh.usage.uncached_input_tokens`, 0)) * $price_in / 1000000.0, 4) AS uncached_input, ROUND(SUM(COALESCE(`span_attributes.dsh.usage.cache_read_tokens`, 0)) * $price_cache_read / 1000000.0, 4) AS cache_read, ROUND(SUM(COALESCE(`span_attributes.dsh.usage.cache_write_tokens`, 0)) * $price_cache_write / 1000000.0, 4) AS cache_write, ROUND(SUM(COALESCE(`span_attributes.gen_ai.usage.output_tokens`, 0)) * $price_out / 1000000.0, 4) AS output FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND `span_attributes.gen_ai.system` IS NOT NULL AND `span_attributes.dsh.session.id` IS NOT NULL AND `span_attributes.gen_ai.request.model` IN ($model)"
+        },
+        {
+          "refId": "B",
+          "format": "table",
+          "rawQuery": true,
+          "datasource": {
+            "type": "mysql",
+            "uid": "greptimedb"
+          },
+          "rawSql": "SELECT '$currency' AS unit"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "configFromData",
+          "options": {
+            "configRefId": "B",
+            "applyTo": {
+              "id": "byType",
+              "options": "number"
+            },
+            "mappings": [
+              {
+                "fieldName": "unit",
+                "handlerKey": "unit"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "title": "Spend by model",
+      "datasource": {
+        "type": "mysql",
+        "uid": "greptimedb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 14
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "spend"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 4
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "spend_per_call"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 6
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "footer": {
+          "show": false
+        },
+        "cellHeight": "sm"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "datasource": {
+            "type": "mysql",
+            "uid": "greptimedb"
+          },
+          "rawSql": "SELECT `span_attributes.gen_ai.request.model` AS model, COUNT(*) AS calls, ROUND((SUM(COALESCE(`span_attributes.dsh.usage.uncached_input_tokens`, 0)) * $price_in + SUM(COALESCE(`span_attributes.dsh.usage.cache_read_tokens`, 0)) * $price_cache_read + SUM(COALESCE(`span_attributes.dsh.usage.cache_write_tokens`, 0)) * $price_cache_write + SUM(COALESCE(`span_attributes.gen_ai.usage.output_tokens`, 0)) * $price_out) / 1000000.0, 4) AS spend, ROUND((SUM(COALESCE(`span_attributes.dsh.usage.uncached_input_tokens`, 0)) * $price_in + SUM(COALESCE(`span_attributes.dsh.usage.cache_read_tokens`, 0)) * $price_cache_read + SUM(COALESCE(`span_attributes.dsh.usage.cache_write_tokens`, 0)) * $price_cache_write + SUM(COALESCE(`span_attributes.gen_ai.usage.output_tokens`, 0)) * $price_out) / 1000000.0 / NULLIF(COUNT(*), 0), 6) AS spend_per_call FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND `span_attributes.gen_ai.system` IS NOT NULL AND `span_attributes.dsh.session.id` IS NOT NULL AND `span_attributes.gen_ai.request.model` IN ($model) GROUP BY model ORDER BY spend DESC"
+        },
+        {
+          "refId": "B",
+          "format": "table",
+          "rawQuery": true,
+          "datasource": {
+            "type": "mysql",
+            "uid": "greptimedb"
+          },
+          "rawSql": "SELECT '$currency' AS unit"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "configFromData",
+          "options": {
+            "configRefId": "B",
+            "applyTo": {
+              "id": "byRegexp",
+              "options": "^spend.*"
+            },
+            "mappings": [
+              {
+                "fieldName": "unit",
+                "handlerKey": "unit"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "type": "barchart",
+      "title": "Spend by hour of day (UTC)",
+      "description": "Where the agent's hours fall. Actionable when the provider prices by time of day, as DeepSeek's off-peak discount does.",
+      "datasource": {
+        "type": "mysql",
+        "uid": "greptimedb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 14
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 4,
+          "custom": {
+            "fillOpacity": 80,
+            "lineWidth": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "xField": "hour_utc",
+        "legend": {
+          "showLegend": false
+        },
+        "orientation": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "datasource": {
+            "type": "mysql",
+            "uid": "greptimedb"
+          },
+          "rawSql": "SELECT concat(lpad(CAST(CAST(date_part('hour', timestamp) AS BIGINT) AS STRING), 2, '0'), ':00') AS hour_utc, ROUND((SUM(COALESCE(`span_attributes.dsh.usage.uncached_input_tokens`, 0)) * $price_in + SUM(COALESCE(`span_attributes.dsh.usage.cache_read_tokens`, 0)) * $price_cache_read + SUM(COALESCE(`span_attributes.dsh.usage.cache_write_tokens`, 0)) * $price_cache_write + SUM(COALESCE(`span_attributes.gen_ai.usage.output_tokens`, 0)) * $price_out) / 1000000.0, 4) AS spend FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND `span_attributes.gen_ai.system` IS NOT NULL AND `span_attributes.dsh.session.id` IS NOT NULL AND `span_attributes.gen_ai.request.model` IN ($model) GROUP BY hour_utc ORDER BY hour_utc"
+        },
+        {
+          "refId": "B",
+          "format": "table",
+          "rawQuery": true,
+          "datasource": {
+            "type": "mysql",
+            "uid": "greptimedb"
+          },
+          "rawSql": "SELECT '$currency' AS unit"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "configFromData",
+          "options": {
+            "configRefId": "B",
+            "applyTo": {
+              "id": "byType",
+              "options": "number"
+            },
+            "mappings": [
+              {
+                "fieldName": "unit",
+                "handlerKey": "unit"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Who spends it",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 22
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "table",
+      "title": "Most expensive sessions",
+      "description": "Click a session to open its turns in the trace explorer or its events in the log explorer.",
+      "datasource": {
+        "type": "mysql",
+        "uid": "greptimedb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 14,
+        "x": 0,
+        "y": 23
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "spend"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 4
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "spend_per_turn"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 4
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "session"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open this session in the trace explorer",
+                    "url": "/d/dsh-traces/a?var-trace_id=&var-session=${__value.raw}&var-outcome=all&${__url_time_range}",
+                    "targetBlank": false
+                  },
+                  {
+                    "title": "See this session in the log explorer",
+                    "url": "/d/dsh-logs/a?var-session=${__value.raw}&var-event_type=%25&var-search=&${__url_time_range}",
+                    "targetBlank": false
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "footer": {
+          "show": false
+        },
+        "cellHeight": "sm"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "datasource": {
+            "type": "mysql",
+            "uid": "greptimedb"
+          },
+          "rawSql": "SELECT `span_attributes.dsh.session.id` AS session, COUNT(DISTINCT trace_id) AS turns, COUNT(*) AS calls, ROUND((SUM(COALESCE(`span_attributes.dsh.usage.uncached_input_tokens`, 0)) * $price_in + SUM(COALESCE(`span_attributes.dsh.usage.cache_read_tokens`, 0)) * $price_cache_read + SUM(COALESCE(`span_attributes.dsh.usage.cache_write_tokens`, 0)) * $price_cache_write + SUM(COALESCE(`span_attributes.gen_ai.usage.output_tokens`, 0)) * $price_out) / 1000000.0, 4) AS spend, ROUND((SUM(COALESCE(`span_attributes.dsh.usage.uncached_input_tokens`, 0)) * $price_in + SUM(COALESCE(`span_attributes.dsh.usage.cache_read_tokens`, 0)) * $price_cache_read + SUM(COALESCE(`span_attributes.dsh.usage.cache_write_tokens`, 0)) * $price_cache_write + SUM(COALESCE(`span_attributes.gen_ai.usage.output_tokens`, 0)) * $price_out) / 1000000.0 / NULLIF(COUNT(DISTINCT trace_id), 0), 4) AS spend_per_turn FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND `span_attributes.gen_ai.system` IS NOT NULL AND `span_attributes.dsh.session.id` IS NOT NULL AND `span_attributes.gen_ai.request.model` IN ($model) GROUP BY session ORDER BY spend DESC LIMIT 20"
+        },
+        {
+          "refId": "B",
+          "format": "table",
+          "rawQuery": true,
+          "datasource": {
+            "type": "mysql",
+            "uid": "greptimedb"
+          },
+          "rawSql": "SELECT '$currency' AS unit"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "configFromData",
+          "options": {
+            "configRefId": "B",
+            "applyTo": {
+              "id": "byRegexp",
+              "options": "^spend.*"
+            },
+            "mappings": [
+              {
+                "fieldName": "unit",
+                "handlerKey": "unit"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "type": "barchart",
+      "title": "Spend by turn outcome",
+      "description": "What the turns you paid for ended up doing. `unfinished` is a turn whose end event never arrived. Spend is attributed per model call, so a turn that switched models splits across them.",
+      "datasource": {
+        "type": "mysql",
+        "uid": "greptimedb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 10,
+        "x": 14,
+        "y": 23
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 4,
+          "custom": {
+            "fillOpacity": 80,
+            "lineWidth": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "xField": "reason",
+        "legend": {
+          "showLegend": false
+        },
+        "orientation": "horizontal"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "datasource": {
+            "type": "mysql",
+            "uid": "greptimedb"
+          },
+          "rawSql": "SELECT COALESCE(reason, 'unfinished') AS reason, ROUND(SUM(spend), 4) AS spend FROM (SELECT model, MAX(reason) OVER (PARTITION BY trace_id) AS reason, spend FROM (SELECT trace_id, `span_attributes.gen_ai.request.model` AS model, MAX(CASE WHEN span_name = 'invoke_agent dsh' THEN `span_attributes.dsh.turn.end_reason` END) AS reason, (SUM(COALESCE(`span_attributes.dsh.usage.uncached_input_tokens`, 0)) * $price_in + SUM(COALESCE(`span_attributes.dsh.usage.cache_read_tokens`, 0)) * $price_cache_read + SUM(COALESCE(`span_attributes.dsh.usage.cache_write_tokens`, 0)) * $price_cache_write + SUM(COALESCE(`span_attributes.gen_ai.usage.output_tokens`, 0)) * $price_out) / 1000000.0 AS spend FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND `span_attributes.dsh.session.id` IS NOT NULL GROUP BY trace_id, model)) WHERE model IN ($model) GROUP BY reason ORDER BY spend DESC"
+        },
+        {
+          "refId": "B",
+          "format": "table",
+          "rawQuery": true,
+          "datasource": {
+            "type": "mysql",
+            "uid": "greptimedb"
+          },
+          "rawSql": "SELECT '$currency' AS unit"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "configFromData",
+          "options": {
+            "configRefId": "B",
+            "applyTo": {
+              "id": "byType",
+              "options": "number"
+            },
+            "mappings": [
+              {
+                "fieldName": "unit",
+                "handlerKey": "unit"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Why it grows",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 31
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "barchart",
+      "title": "Billed input tokens by step",
+      "description": "Position of the model call inside its turn, ranked by start time rather than read from dsh.step, so it holds whatever numbering the harness uses. Every step resends the conversation so far; this is the shape of that growth.",
+      "datasource": {
+        "type": "mysql",
+        "uid": "greptimedb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 32
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 80,
+            "lineWidth": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "xField": "step",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "orientation": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "datasource": {
+            "type": "mysql",
+            "uid": "greptimedb"
+          },
+          "rawSql": "SELECT lpad(CAST(step AS STRING), 2, '0') AS step, mean, p95 FROM (SELECT step, ROUND(AVG(input), 0) AS mean, ROUND(approx_percentile_cont(input, 0.95), 0) AS p95 FROM (SELECT ROW_NUMBER() OVER (PARTITION BY trace_id ORDER BY timestamp) AS step, COALESCE(`span_attributes.gen_ai.usage.input_tokens`, 0) AS input FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND `span_attributes.gen_ai.system` IS NOT NULL AND `span_attributes.dsh.session.id` IS NOT NULL AND `span_attributes.gen_ai.request.model` IN ($model)) GROUP BY step) ORDER BY step"
+        }
+      ]
+    },
+    {
+      "type": "barchart",
+      "title": "Billed input tokens by turn",
+      "description": "The same growth across a session rather than within a turn: turn 20 carries everything turns 1 to 19 said. Turns are ranked within their session, so the axis reads the same whatever numbering the harness uses. When this climbs, compaction or a fresh session is the cheaper move.",
+      "datasource": {
+        "type": "mysql",
+        "uid": "greptimedb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 32
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "fillOpacity": 80,
+            "lineWidth": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "xField": "turn",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "orientation": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "table",
+          "rawQuery": true,
+          "datasource": {
+            "type": "mysql",
+            "uid": "greptimedb"
+          },
+          "rawSql": "SELECT lpad(CAST(turn AS STRING), 3, '0') AS turn, mean, p95 FROM (SELECT turn, ROUND(AVG(input), 0) AS mean, ROUND(approx_percentile_cont(input, 0.95), 0) AS p95 FROM (SELECT DENSE_RANK() OVER (PARTITION BY session ORDER BY turn_id) AS turn, input FROM (SELECT `span_attributes.dsh.session.id` AS session, `span_attributes.dsh.turn` AS turn_id, COALESCE(`span_attributes.gen_ai.usage.input_tokens`, 0) AS input FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND `span_attributes.gen_ai.system` IS NOT NULL AND `span_attributes.dsh.session.id` IS NOT NULL AND `span_attributes.gen_ai.request.model` IN ($model) AND `span_attributes.dsh.turn` IS NOT NULL)) GROUP BY turn) ORDER BY turn"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Spend per turn over time",
+      "description": "The trend that says whether a change made the agent cheaper. Flat here with rising total spend means you are simply running more.",
+      "datasource": {
+        "type": "mysql",
+        "uid": "greptimedb"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 32
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 4,
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "showPoints": "auto",
+            "pointSize": 4
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "format": "time_series",
+          "rawQuery": true,
+          "datasource": {
+            "type": "mysql",
+            "uid": "greptimedb"
+          },
+          "rawSql": "SELECT date_bin('15 minutes'::INTERVAL, timestamp) AS time, ROUND((SUM(COALESCE(`span_attributes.dsh.usage.uncached_input_tokens`, 0)) * $price_in + SUM(COALESCE(`span_attributes.dsh.usage.cache_read_tokens`, 0)) * $price_cache_read + SUM(COALESCE(`span_attributes.dsh.usage.cache_write_tokens`, 0)) * $price_cache_write + SUM(COALESCE(`span_attributes.gen_ai.usage.output_tokens`, 0)) * $price_out) / 1000000.0 / NULLIF(COUNT(DISTINCT trace_id), 0), 6) AS spend_per_turn FROM opentelemetry_traces WHERE $__timeFilter(timestamp) AND `span_attributes.gen_ai.system` IS NOT NULL AND `span_attributes.dsh.session.id` IS NOT NULL AND `span_attributes.gen_ai.request.model` IN ($model) GROUP BY time ORDER BY time"
+        },
+        {
+          "refId": "B",
+          "format": "table",
+          "rawQuery": true,
+          "datasource": {
+            "type": "mysql",
+            "uid": "greptimedb"
+          },
+          "rawSql": "SELECT '$currency' AS unit"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "configFromData",
+          "options": {
+            "configRefId": "B",
+            "applyTo": {
+              "id": "byType",
+              "options": "number"
+            },
+            "mappings": [
+              {
+                "fieldName": "unit",
+                "handlerKey": "unit"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,8 +1,10 @@
 # Grafana dashboards
 
-Five provisioned dashboards over the data `@tma1-ai/dsh-plugin-greptimedb` writes, plus a compose stack that brings up GreptimeDB and Grafana together.
+Seven provisioned dashboards over the data `@tma1-ai/dsh-plugin-greptimedb` writes, plus a compose stack that brings up GreptimeDB and Grafana together.
 
 ![Overview](screenshots/overview.png)
+
+![Cost](screenshots/cost.png)
 
 ![Trace explorer](screenshots/trace-explorer.png)
 
@@ -26,13 +28,25 @@ node grafana/seed.mjs --turns 80
 
 | Dashboard | Answers |
 |---|---|
-| **DSH · Overview** | What did this cost, how fast was it, how much came from cache |
-| **DSH · Agent loop** | Which tools ran, how often they failed, how many model calls a turn needed |
+| **DSH · Overview** | How many tokens, how fast, how much came from cache |
+| **DSH · Cost** | What it cost in money, what the money bought, and why the bill grows |
+| **DSH · Sessions** | How long a conversation ran, how many turns it took, where it failed |
+| **DSH · Agent loop** | Which tools ran, how often they failed, how many model calls a turn needed, where a turn's time went |
 | **DSH · Trace explorer** | What happened inside one specific turn, span by span |
 | **DSH · Log explorer** | Every session event, filterable by session, type, and full-text body search |
 | **DSH · Metrics** | The same activity read through PromQL, for the retention and sampling reasons below |
 
-Overview and Agent loop are the two you leave open. Trace explorer and Log explorer are where you go once something looks wrong.
+Overview, Cost, and Agent loop are the ones you leave open. Sessions, Trace explorer, and Log explorer are where you go once something looks wrong.
+
+### Pricing in the Cost dashboard
+
+No price list is baked into the queries. Four textbox variables carry the rates per million tokens — uncached input, cache read, cache write, output — and every panel multiplies the token counts it reads by them. The defaults are DeepSeek's published `deepseek-v4-flash` peak rates in CNY (`3.0`, `0.10`, `3.0`, `9.0`); the same rates in USD are `0.44`, `0.014`, `0.44`, `1.32`. DSH counts cache writes separately from input, and DeepSeek publishes no write premium, so that rate defaults to the input rate.
+
+The Currency variable holds a Grafana unit — `currencyUSD` or `prefix:¥` — and a second query per money panel (`SELECT '$currency' AS unit`) feeds it in through a `configFromData` transformation, because Grafana does not expand variables inside a field's unit. Adding a currency means adding an option to that variable; picking one changes the symbol only, so retype the four rates as well.
+
+One rate set applies to every selected model, so several models at different prices need the Model filter to be read one at a time.
+
+The panels that need a whole turn at once — cost by turn outcome, the turn time split, the per-turn table — group the trace table by `trace_id` and pick the pieces out with `CASE`. Every span of a turn shares its trace id, so no join is involved.
 
 Metrics covers what traces cannot: they outlive a shorter trace retention, stay whole under trace sampling, and give percentiles from histogram buckets instead of a scan over every span. Its data points carry the time they were collected, not the time of the events they count, so a replay of historical events shows up at replay time.
 
