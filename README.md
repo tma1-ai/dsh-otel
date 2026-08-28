@@ -7,9 +7,9 @@
 
 English | [中文](README.zh.md)
 
-Send [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) telemetry to [GreptimeDB](https://github.com/GreptimeTeam/greptimedb) as OpenTelemetry traces, metrics, and logs.
+See what your [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) agent spends — tokens, money, and time — per turn, per model call, per tool.
 
-No collector. No sidecar. No fork of DSH. It installs as an ordinary plugin, and every turn, model call, and tool execution becomes a row you can query:
+The plugin exports OpenTelemetry traces, metrics, and logs into [GreptimeDB](https://github.com/GreptimeTeam/greptimedb), and ships seven Grafana dashboards that read them. No collector. No sidecar. No fork of DSH. It installs as an ordinary plugin, and every turn, model call, and tool execution becomes a row you can query:
 
 ```sql
 -- Slowest tool calls, with the model that requested them.
@@ -46,11 +46,12 @@ The package ships a bundle patch, so that one command wires it into the profile.
 
 A profile patch replaces the row's whole `config` instead of merging into it, so restate every field you want to keep.
 
-The defaults already point at a local GreptimeDB. The compose stack under [`grafana/`](grafana/) starts one with Grafana and the seven [dashboards](#dashboards) already provisioned:
+The defaults already point at a local GreptimeDB. The compose stack under [`grafana/`](grafana/) starts one with Grafana and the seven [dashboards](#dashboards) already provisioned. Grafana reads those dashboards off disk, so fetch that one directory — no clone, no git:
 
 ```sh
-git clone https://github.com/tma1-ai/dsh-otel.git
-cd dsh-otel/grafana && docker compose up -d && open http://localhost:3000
+curl -fsSL https://github.com/tma1-ai/dsh-otel/archive/main.tar.gz \
+  | tar -xz --strip-components=1 dsh-otel-main/grafana
+cd grafana && docker compose up -d && open http://localhost:3000
 ```
 
 For the database alone, GreptimeDB's own console at <http://localhost:4000/dashboard/> is enough to check the tables and run ad-hoc SQL:

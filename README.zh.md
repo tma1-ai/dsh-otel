@@ -7,9 +7,9 @@
 
 [English](README.md) | 中文
 
-把 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 的运行数据以 OpenTelemetry traces、metrics、logs 写入 [GreptimeDB](https://github.com/GreptimeTeam/greptimedb)。
+看清 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 花掉了多少 token、多少钱、多少时间——按 turn、按模型调用、按工具拆开看。
 
-不需要 collector，不需要 sidecar，不用 fork DSH。它就是个普通插件，装上之后每一次 turn、模型调用和工具执行都变成一行可查的数据：
+插件把这些数据以 OpenTelemetry traces、metrics、logs 写入 [GreptimeDB](https://github.com/GreptimeTeam/greptimedb)，并附带七个读这些数据的 Grafana dashboard。不需要 collector，不需要 sidecar，不用 fork DSH。它就是个普通插件，装上之后每一次 turn、模型调用和工具执行都变成一行可查的数据：
 
 ```sql
 -- 最慢的工具调用，以及是哪个模型发起的。
@@ -46,11 +46,12 @@ dsh plugin --profile headless add @tma1-ai/dsh-plugin-greptimedb
 
 profile patch 是整体替换目标行的 `config`，不是深合并，所以要保留的字段必须全部重述。
 
-默认配置直接指向本地 GreptimeDB。[`grafana/`](grafana/) 下的 compose 栈会连同 Grafana 和七个配好的 [dashboard](#dashboard) 一起拉起来：
+默认配置直接指向本地 GreptimeDB。[`grafana/`](grafana/) 下的 compose 栈会连同 Grafana 和七个配好的 [dashboard](#dashboard) 一起拉起来。Grafana 的 provisioning 要从磁盘读这些 dashboard，所以把这一个目录取下来就行，不用 clone，也不需要 git：
 
 ```sh
-git clone https://github.com/tma1-ai/dsh-otel.git
-cd dsh-otel/grafana && docker compose up -d && open http://localhost:3000
+curl -fsSL https://github.com/tma1-ai/dsh-otel/archive/main.tar.gz \
+  | tar -xz --strip-components=1 dsh-otel-main/grafana
+cd grafana && docker compose up -d && open http://localhost:3000
 ```
 
 只要数据库的话，GreptimeDB 自带的控制台在 <http://localhost:4000/dashboard/>，看表和跑临时 SQL 够用：

@@ -1,7 +1,7 @@
 {
   "name": "@tma1-ai/dsh-plugin-greptimedb",
   "version": "0.1.0-beta.2",
-  "description": "OpenTelemetry traces, metrics, and logs for DeepSeek Harness, written straight into GreptimeDB.",
+  "description": "See what your DeepSeek Harness agent spends — tokens, money, and time, per turn, model call, and tool — as OpenTelemetry traces, metrics, and logs in GreptimeDB, with seven Grafana dashboards.",
   "keywords": [
     "deepseek",
     "deepseek-harness",
@@ -12,6 +12,13 @@
     "otel",
     "greptimedb",
     "observability",
+    "agent-observability",
+    "llm-observability",
+    "genai",
+    "token-usage",
+    "cost",
+    "tracing",
+    "grafana",
     "llm",
     "agent"
   ],
