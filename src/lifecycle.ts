@@ -27,6 +27,18 @@ import { createInstruments, type Instruments } from './metrics.js'
 /** Instrumentation scope reported for every span, metric, and log record. */
 export const SCOPE_NAME = '@tma1-ai/dsh-plugin-greptimedb'
 
+/**
+ * How much longer a batch processor waits than the exporter it drives.
+ *
+ * Both deadlines derive from `exportTimeoutMillis`. Left equal, they expire on
+ * the same tick and the winner decides what the failure looks like: the
+ * exporter's own timeout runs its result callback and reports an `export`
+ * failure, while the processor's rejects with `Timeout` and never calls it, so
+ * the same refused write surfaces as a `shutdown` failure with the transport
+ * error lost. The margin makes the exporter always finish first.
+ */
+const PROCESSOR_TIMEOUT_MARGIN_MILLIS = 1_000
+
 export type FailureStage = 'export' | 'shutdown'
 
 export type FailureSink = (stage: FailureStage, error: unknown) => void
@@ -96,7 +108,7 @@ export function createPipeline(
           maxExportBatchSize: config.maxExportBatchSize,
           maxQueueSize: config.maxQueueSize,
           scheduledDelayMillis: config.scheduledDelayMillis,
-          exportTimeoutMillis: config.exportTimeoutMillis,
+          exportTimeoutMillis: config.exportTimeoutMillis + PROCESSOR_TIMEOUT_MARGIN_MILLIS,
         }),
       ],
     })
@@ -112,6 +124,9 @@ export function createPipeline(
         new PeriodicExportingMetricReader({
           exporter: reportingExporter(new OTLPMetricExporter(exporterOptions(config, 'metrics')), onError),
           exportIntervalMillis: config.metricIntervalMillis,
+          // No margin here: the reader rejects a timeout above its interval,
+          // and widening the interval to make room would change the collection
+          // period the deployment asked for.
           exportTimeoutMillis: config.exportTimeoutMillis,
         }),
       ],
@@ -130,7 +145,7 @@ export function createPipeline(
           maxExportBatchSize: config.maxExportBatchSize,
           maxQueueSize: config.maxQueueSize,
           scheduledDelayMillis: config.scheduledDelayMillis,
-          exportTimeoutMillis: config.exportTimeoutMillis,
+          exportTimeoutMillis: config.exportTimeoutMillis + PROCESSOR_TIMEOUT_MARGIN_MILLIS,
         }),
       ],
     })
