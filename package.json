@@ -1,6 +1,6 @@
 {
   "name": "@tma1-ai/dsh-plugin-greptimedb",
-  "version": "0.1.0-beta.3",
+  "version": "0.1.0-beta.4",
   "description": "What a DeepSeek Harness run costs in tokens, money, and time. OpenTelemetry traces, metrics, and logs in GreptimeDB, with seven Grafana dashboards.",
   "keywords": [
     "deepseek",
@@ -66,7 +66,7 @@
     "test:integration": "vitest run tests/greptimedb.integration.spec.ts",
     "smoke": "node scripts/smoke-tarball.mjs",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "pnpm run clean && pnpm run build"
+    "prepare": "pnpm run clean && pnpm run build"
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "^3.18.1",
