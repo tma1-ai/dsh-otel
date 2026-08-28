@@ -30,7 +30,7 @@ LIMIT 10;
 
 ## Quick start
 
-Use pnpm 10 or newer. `dsh plugin` forwards to whichever `pnpm` is on your PATH, and a dsh profile directory is its own pnpm workspace root. pnpm 9 refuses to install there and ignores the linker settings dsh writes.
+Requires pnpm 10 or newer. `dsh plugin` forwards to whichever `pnpm` is on your PATH, and a dsh profile directory is its own pnpm workspace root. pnpm 9 refuses to install there and ignores the linker settings dsh writes.
 
 **Start the database and Grafana.** The compose stack under [`grafana/`](grafana/) brings up GreptimeDB with the seven [dashboards](#dashboards) provisioned. Grafana reads those dashboards off disk, so fetch that one directory instead of cloning the repository:
 
@@ -40,7 +40,7 @@ curl -fsSL https://github.com/tma1-ai/dsh-otel/archive/main.tar.gz \
 cd grafana && docker compose up -d
 ```
 
-**Install the plugin.** Its defaults already point at the database you just started, so there is nothing to configure:
+**Install the plugin.** Its defaults point at the database started above, so no configuration is required:
 
 ```sh
 dsh plugin --profile web add @tma1-ai/dsh-plugin-greptimedb
@@ -48,15 +48,15 @@ dsh plugin --profile web add @tma1-ai/dsh-plugin-greptimedb
 
 The package ships a bundle patch, so that one command wires it into the profile.
 
-**Run DSH, then look.** Traces and logs land within `scheduledDelayMillis`, 5 seconds by default; metrics arrive on the next collection period, 30 seconds by default. An idle DSH writes nothing, so send it a task first:
+**Run DSH and check the data.** Traces and logs are written within `scheduledDelayMillis`, 5 seconds by default; metrics on the next collection period, 30 seconds by default. DSH produces no data while idle, so run a task first:
 
 ```sh
 dsh web
 ```
 
-Grafana is at <http://localhost:3000>, provisioned with anonymous admin access and no login. Start with Overview.
+Grafana is at <http://localhost:3000>, with anonymous admin access enabled and no login required. Start with the Overview dashboard.
 
-If you want the database without Grafana, GreptimeDB's own console at <http://localhost:4000/dashboard/> is enough to check the tables and run ad-hoc SQL:
+For the database alone, GreptimeDB's own console at <http://localhost:4000/dashboard/> is enough to check the tables and run ad-hoc SQL:
 
 ```sh
 docker run -p 127.0.0.1:4000-4003:4000-4003 \
@@ -145,8 +145,6 @@ The breakdown stays queryable as `dsh.usage.uncached_input_tokens`, `dsh.usage.c
 | `dsh.token.detail` | Histogram | `dsh.token.detail_kind` (`cache_read`/`cache_write`/`reasoning`), model, provider |
 | `dsh.tool.invocations` | Counter | `gen_ai.tool.name`, `dsh.tool.outcome` |
 | `dsh.turns` / `dsh.steps` | Counter | |
-
-Durations are three instruments, not one. A turn, a tool execution, and a model call differ by orders of magnitude, so a percentile over their union describes none of them.
 
 ## Logs
 

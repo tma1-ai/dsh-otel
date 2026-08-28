@@ -30,9 +30,9 @@ LIMIT 10;
 
 ## 快速开始
 
-用 pnpm 10 或更高版本。`dsh plugin` 会转发给 PATH 上的 `pnpm`，而 dsh 的 profile 目录本身就是一个 pnpm workspace root，pnpm 9 会拒绝在那里安装，也会忽略 dsh 写下的 linker 设置。
+需要 pnpm 10 或更高版本。`dsh plugin` 会转发给 PATH 上的 `pnpm`，而 dsh 的 profile 目录本身就是一个 pnpm workspace root，pnpm 9 会拒绝在那里安装，也会忽略 dsh 写下的 linker 设置。
 
-**先起数据库和 Grafana。**[`grafana/`](grafana/) 下的 compose 栈会把 GreptimeDB 和七个配好的 [dashboard](#dashboard) 一起拉起来。Grafana 的 provisioning 要从磁盘读这些 dashboard，所以取这一个目录就行，不用 clone 整个仓库：
+**启动数据库和 Grafana。**[`grafana/`](grafana/) 下的 compose 栈会启动 GreptimeDB，并配好七个 [dashboard](#dashboard)。Grafana 的 provisioning 要从磁盘读这些 dashboard，因此只需获取该目录，无需 clone 整个仓库：
 
 ```sh
 curl -fsSL https://github.com/tma1-ai/dsh-otel/archive/main.tar.gz \
@@ -40,7 +40,7 @@ curl -fsSL https://github.com/tma1-ai/dsh-otel/archive/main.tar.gz \
 cd grafana && docker compose up -d
 ```
 
-**再装插件。**默认配置就指向刚起的这个数据库，不用改任何东西：
+**安装插件。**默认配置已指向上述数据库，无需额外配置：
 
 ```sh
 dsh plugin --profile web add @tma1-ai/dsh-plugin-greptimedb
@@ -48,15 +48,15 @@ dsh plugin --profile web add @tma1-ai/dsh-plugin-greptimedb
 
 包自带 bundle patch，这一条命令就把它接进 profile。
 
-**跑起来再看。**trace 和 log 在 `scheduledDelayMillis`（默认 5 秒）内落库，metric 等下一个采集周期（默认 30 秒）。DSH 闲着不会写任何数据，所以先给它一个任务：
+**运行并查看数据。**trace 和 log 在 `scheduledDelayMillis`（默认 5 秒）内写入，metric 在下一个采集周期（默认 30 秒）写入。DSH 空闲时不产生数据，需先执行一次任务：
 
 ```sh
 dsh web
 ```
 
-Grafana 在 <http://localhost:3000>，已配好匿名 admin 访问，不用登录。从 Overview 开始看。
+Grafana 地址为 <http://localhost:3000>，已启用匿名 admin 访问，无需登录。建议从 Overview 开始。
 
-只要数据库不要 Grafana 的话，GreptimeDB 自带的控制台在 <http://localhost:4000/dashboard/>，看表和跑临时 SQL 够用：
+如果只需要数据库，GreptimeDB 自带的控制台在 <http://localhost:4000/dashboard/>，看表和跑临时 SQL 够用：
 
 ```sh
 docker run -p 127.0.0.1:4000-4003:4000-4003 \
@@ -146,8 +146,6 @@ gen_ai.usage.output_tokens = outputTokens          （已含 reasoning tokens）
 | `dsh.tool.invocations` | Counter | `gen_ai.tool.name`、`dsh.tool.outcome` |
 | `dsh.turns` / `dsh.steps` | Counter | |
 
-耗时分成三个 instrument，不是一个。一个 turn、一次工具执行和一次模型调用的量级差着数量级，混在一起算分位数，哪一个都说明不了。
-
 ## Logs
 
 每个 session 事件一条记录。四个属性通过 `X-Greptime-Log-Extract-Keys` 变成真实列：
@@ -221,8 +219,8 @@ GREPTIMEDB_OTLP_ENDPOINT=http://localhost:4000/v1/otlp pnpm test   # 追加真�
 
 ## 已知限制
 
-- **DSH 处于 pre-release**，首个正式版本前会自由重命名和重组包结构。插件只用它的类型，所以不声明 peer 版本：DSH 每个版本都是预发布版，而 semver 不匹配 range 里没写明的预发布版，锁哪个 range 都会在下一个 `-rc` 上失效。代价是 DSH 改了名字，装的时候不报错，要等 CI 跑到才知道；CI 跑的是 `0.1.1-rc.2`。
-- **发布出去的 `.d.ts` 会 import DSH 的类型。** 在没有 DSH 的环境里对这个包做类型检查，要开 `skipLibCheck`，或者把 DSH 那几个包一起装上。
+- **DSH 处于 pre-release**，首个正式版本前会自由重命名和重组包结构。插件只用它的类型，所以不声明 peer 版本：DSH 每个版本都是预发布版，而 semver 不匹配 range 里没写明的预发布版，锁哪个 range 都会在下一个 `-rc` 上失效。代价是 DSH 的重命名不会在安装时暴露，只能由 CI 发现；CI 运行的版本是 `0.1.1-rc.2`。
+- **发布出去的 `.d.ts` 会 import DSH 的类型。** 在没有 DSH 的环境中对本包做类型检查，需启用 `skipLibCheck`，或同时安装对应的 DSH 包。
 - **GenAI 语义规范仍是 experimental。** 名字取自 `@opentelemetry/semantic-conventions/incubating`，会随它变动。span 同时带 `gen_ai.provider.name` 和已废弃的 `gen_ai.system`。
 - **`ttl` 覆盖不到 metric 表。** metric 走 metric engine，保留期是 physical table 的属性。hint 只到得了逻辑表，逻辑表会存下并显示它，但不会执行（[greptimedb#8951](https://github.com/GreptimeTeam/greptimedb/issues/8951)）。请自行 `ALTER TABLE greptime_physical_table SET 'ttl' = '180d'`。
 - **不做逐 turn flush。** 导出遵循 batch processor 自身节奏。
