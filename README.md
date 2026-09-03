@@ -72,15 +72,15 @@ Both bind port 4000, so run one or the other.
 
 DSH package APIs change between prereleases, so each plugin release targets one DSH version:
 
-| Plugin | DSH |
-|---|---|
-| `0.1.0-beta.5` | `0.1.2-alpha.5` |
-| `0.1.0-beta.4` and earlier | `0.1.1-rc.2` |
+| Plugin | npm tag | DSH |
+|---|---|---|
+| `0.1.0-beta.5` | `beta` | `0.1.2-alpha.5` |
+| `0.1.0-beta.4` and earlier | `latest` | `0.1.1-rc.2` |
 
-`dsh plugin add` installs the newest release. On an older DSH, name the version instead — the arguments are forwarded to `pnpm add` verbatim:
+`dsh plugin add` with no version installs `latest`, which tracks DSH's own `latest`. Ask for the `beta` tag to follow the DSH alpha line — arguments are forwarded to `pnpm add` verbatim, so an exact version works the same way:
 
 ```sh
-dsh plugin --profile web add @tma1-ai/dsh-plugin-greptimedb@0.1.0-beta.4
+dsh plugin --profile web add @tma1-ai/dsh-plugin-greptimedb@beta
 ```
 
 A mismatch is not a load failure. The plugin mounts, then drops every record with a `greptimedb-otel: dropped a telemetry record` warning, and the tables stay empty.

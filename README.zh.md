@@ -72,15 +72,15 @@ docker run -p 127.0.0.1:4000-4003:4000-4003 \
 
 DSH 的包 API 在预发布版之间会变，因此每个插件版本对应一个 DSH 版本：
 
-| 插件 | DSH |
-|---|---|
-| `0.1.0-beta.5` | `0.1.2-alpha.5` |
-| `0.1.0-beta.4` 及更早 | `0.1.1-rc.2` |
+| 插件 | npm tag | DSH |
+|---|---|---|
+| `0.1.0-beta.5` | `beta` | `0.1.2-alpha.5` |
+| `0.1.0-beta.4` 及更早 | `latest` | `0.1.1-rc.2` |
 
-`dsh plugin add` 装的是最新版。DSH 版本较旧时指定版本号即可，参数会原样转给 `pnpm add`：
+`dsh plugin add` 不指定版本时装的是 `latest`，对应 DSH 自己的 `latest`。要跟 DSH alpha 线就装 `beta` tag；参数会原样转给 `pnpm add`，指定确切版本号同理：
 
 ```sh
-dsh plugin --profile web add @tma1-ai/dsh-plugin-greptimedb@0.1.0-beta.4
+dsh plugin --profile web add @tma1-ai/dsh-plugin-greptimedb@beta
 ```
 
 版本不匹配不会导致加载失败。插件照常挂载，然后逐条丢弃记录并打出 `greptimedb-otel: dropped a telemetry record` 告警，表里始终没有数据。
