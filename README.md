@@ -68,6 +68,23 @@ docker run -p 127.0.0.1:4000-4003:4000-4003 \
 
 Both bind port 4000, so run one or the other.
 
+## Compatibility
+
+DSH package APIs change between prereleases, so each plugin release targets one DSH version:
+
+| Plugin | npm tag | DSH |
+|---|---|---|
+| `0.1.0-beta.5` | `beta` | `0.1.2-alpha.5` |
+| `0.1.0-beta.4` and earlier | `latest` | `0.1.1-rc.2` |
+
+`dsh plugin add` with no version installs `latest`, which tracks DSH's own `latest`. Ask for the `beta` tag to follow the DSH alpha line — arguments are forwarded to `pnpm add` verbatim, so an exact version works the same way:
+
+```sh
+dsh plugin --profile web add @tma1-ai/dsh-plugin-greptimedb@beta
+```
+
+A mismatch is not a load failure. The plugin mounts, then drops every record with a `greptimedb-otel: dropped a telemetry record` warning, and the tables stay empty.
+
 ## Configuration
 
 To point the plugin at your own database, override the row in `$DSH_HOME/profiles/<name>/cordis.patch.yml`:
@@ -219,7 +236,7 @@ GREPTIMEDB_OTLP_ENDPOINT=http://localhost:4000/v1/otlp pnpm test   # adds the li
 
 ## Known limitations
 
-- **DSH is pre-release** and renames and repackages freely before its first tagged release. The plugin uses the DSH packages for types only and declares no peer range on them, because every DSH version is a prerelease and semver matches no prerelease a range does not name outright. Any range pinned here would fail on the next `-rc`. The cost is that a rename in DSH does not fail the install; it fails CI, which runs against `0.1.1-rc.2`.
+- **DSH is pre-release** and renames and repackages freely before its first tagged release. The plugin uses the DSH packages for types only and declares no peer range on them, because every DSH version is a prerelease and semver matches no prerelease a range does not name outright. Any range pinned here would fail on the next prerelease. The cost is that a rename in DSH does not fail the install; it fails CI, which runs against the version in [Compatibility](#compatibility).
 - **The published `.d.ts` imports DSH types.** Type-checking this package outside a DSH install needs `skipLibCheck` on, or the DSH packages installed alongside it.
 - **The GenAI conventions are experimental.** Names come from `@opentelemetry/semantic-conventions/incubating` and move with it. Spans carry both `gen_ai.provider.name` and the deprecated `gen_ai.system`.
 - **`ttl` does not reach metric tables.** Metrics land on the metric engine, where retention is a property of the physical table. The hint reaches the logical table, which stores and displays it but never enforces it ([greptimedb#8951](https://github.com/GreptimeTeam/greptimedb/issues/8951)). Set it yourself with `ALTER TABLE greptime_physical_table SET 'ttl' = '180d'`.

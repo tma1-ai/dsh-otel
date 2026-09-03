@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
+import type {} from '@deepseek-ai/dsh-tool-todo'
 import type { SessionEvent, SessionEventMap } from '@deepseek-ai/dsh-session'
 import { projectEvent } from '../src/projection.js'
 import { assistantMessage, callId, event, resetSeq, toolResult, userMessage, T0 } from './fixtures.js'

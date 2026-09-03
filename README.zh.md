@@ -68,6 +68,23 @@ docker run -p 127.0.0.1:4000-4003:4000-4003 \
 
 两者都占 4000 端口，起一个就行。
 
+## 版本兼容
+
+DSH 的包 API 在预发布版之间会变，因此每个插件版本对应一个 DSH 版本：
+
+| 插件 | npm tag | DSH |
+|---|---|---|
+| `0.1.0-beta.5` | `beta` | `0.1.2-alpha.5` |
+| `0.1.0-beta.4` 及更早 | `latest` | `0.1.1-rc.2` |
+
+`dsh plugin add` 不指定版本时装的是 `latest`，对应 DSH 自己的 `latest`。要跟 DSH alpha 线就装 `beta` tag；参数会原样转给 `pnpm add`，指定确切版本号同理：
+
+```sh
+dsh plugin --profile web add @tma1-ai/dsh-plugin-greptimedb@beta
+```
+
+版本不匹配不会导致加载失败。插件照常挂载，然后逐条丢弃记录并打出 `greptimedb-otel: dropped a telemetry record` 告警，表里始终没有数据。
+
 ## 配置
 
 要指向自己的数据库，在 `$DSH_HOME/profiles/<name>/cordis.patch.yml` 里覆盖这一行：
@@ -219,7 +236,7 @@ GREPTIMEDB_OTLP_ENDPOINT=http://localhost:4000/v1/otlp pnpm test   # 追加真�
 
 ## 已知限制
 
-- **DSH 处于 pre-release**，首个正式版本前会自由重命名和重组包结构。插件只用它的类型，所以不声明 peer 版本：DSH 每个版本都是预发布版，而 semver 不匹配 range 里没写明的预发布版，锁哪个 range 都会在下一个 `-rc` 上失效。代价是 DSH 的重命名不会在安装时暴露，只能由 CI 发现；CI 运行的版本是 `0.1.1-rc.2`。
+- **DSH 处于 pre-release**，首个正式版本前会自由重命名和重组包结构。插件只用它的类型，所以不声明 peer 版本：DSH 每个版本都是预发布版，而 semver 不匹配 range 里没写明的预发布版，锁哪个 range 都会在下一个预发布版上失效。代价是 DSH 的重命名不会在安装时暴露，只能由 CI 发现；CI 运行的版本见[版本兼容](#版本兼容)。
 - **发布出去的 `.d.ts` 会 import DSH 的类型。** 在没有 DSH 的环境中对本包做类型检查，需启用 `skipLibCheck`，或同时安装对应的 DSH 包。
 - **GenAI 语义规范仍是 experimental。** 名字取自 `@opentelemetry/semantic-conventions/incubating`，会随它变动。span 同时带 `gen_ai.provider.name` 和已废弃的 `gen_ai.system`。
 - **`ttl` 覆盖不到 metric 表。** metric 走 metric engine，保留期是 physical table 的属性。hint 只到得了逻辑表，逻辑表会存下并显示它，但不会执行（[greptimedb#8951](https://github.com/GreptimeTeam/greptimedb/issues/8951)）。请自行 `ALTER TABLE greptime_physical_table SET 'ttl' = '180d'`。

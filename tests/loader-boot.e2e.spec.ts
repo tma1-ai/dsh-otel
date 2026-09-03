@@ -27,7 +27,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { boot } from '@deepseek-ai/dsh-app-boot'
-import { CallId, LlmAdapter, createUserMessage } from '@deepseek-ai/dsh-llm'
+import { ToolCallId, LlmAdapter, createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { defineTool } from '@deepseek-ai/dsh-tools'
@@ -42,7 +42,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const PROVIDER = 'mock'
 const MODEL = 'mock-model'
 const TOOL_NAME = 'sentinel_probe'
-const TOOL_CALL_ID = CallId('call-sentinel')
+const TOOL_CALL_ID = ToolCallId('call-sentinel')
 
 /**
  * One marker per payload the plugin can see, planted where the loop really
@@ -199,6 +199,10 @@ function configFor(mode: ContentMode): string {
     '',
     '- id: session',
     "  name: '@deepseek-ai/dsh-session'",
+    '',
+    // The loop injects `sessionProjections`; without this entry nothing mounts.
+    '- id: session-projection',
+    "  name: '@deepseek-ai/dsh-session-projection'",
     '',
     '- id: system-prompt',
     "  name: '@deepseek-ai/dsh-system-prompt'",
