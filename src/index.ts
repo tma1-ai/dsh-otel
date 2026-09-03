@@ -64,13 +64,10 @@ export function apply(ctx: Context, config: Config): void {
     let recorder = recorders.get(session)
     if (recorder === undefined) {
       recorder = new SessionRecorder(session.id, pipeline.tracer, pipeline.instruments, session.header.createdAt)
-      // Replaying more than the route would re-emit spans for past work.
-      for (let index = session.events.length - 1; index >= 0; index -= 1) {
-        const event = session.events[index]
-        if (event?.type !== 'request/context') continue
-        recorder.seedRoute(event.data.provider, event.data.model)
-        break
-      }
+      // Replaying more than the route would re-emit spans for past work, and
+      // the session already folds `request/context` down to exactly that.
+      const route = session.requestContext()
+      if (route !== undefined) recorder.seedRoute(route.provider, route.model)
       recorders.set(session, recorder)
     }
     return recorder

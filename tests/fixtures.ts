@@ -10,13 +10,13 @@
  */
 
 import type { SessionEvent, SessionEventMap, SessionEventType } from '@deepseek-ai/dsh-session'
-import { CallId, type TokenUsage } from '@deepseek-ai/dsh-llm'
+import { ToolCallId, type TokenUsage } from '@deepseek-ai/dsh-llm'
 
 /** Wall time the first synthetic event carries; later events offset from it. */
 export const T0 = 1_800_000_000_000
 
 /** The harness's own call-id constructor, so fixtures brand ids the way the tool layer does. */
-export const callId = CallId
+export const callId = ToolCallId
 
 let seq = 0
 

@@ -10,6 +10,9 @@
  * @module projection
  */
 
+// `todo/write` lives in the todo tool's augmentation, not in the session core,
+// so its branch below needs this import to reach the declaration.
+import type {} from '@deepseek-ai/dsh-tool-todo'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import type { ContentMode } from './config.js'
 
